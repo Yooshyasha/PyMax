@@ -262,6 +262,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         self._database.update_auth_token(self._device_id, self._token)
 
         if start:
+            # чувак, если ты будешь это читать, то нельзя делать одну функцию и логином и рантаймом;
+            # честно, воняет, но я все понимаю и не виню
             while True:
                 # noinspection PyBroadException
                 try:
