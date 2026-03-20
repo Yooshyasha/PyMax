@@ -17,7 +17,7 @@ from .crud import Database
 from .exceptions import (
     InvalidPhoneError,
     SocketNotConnectedError,
-    WebSocketNotConnectedError,
+    WebSocketNotConnectedError, NeedRegistration,
 )
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
@@ -311,7 +311,11 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             token = login_attrs.get("token")
 
         if not token:
-            raise ValueError("Login response did not contain tokenAttrs.LOGIN.token")
+            if not resp.get("tokenAttrs", {}).get("REGISTER"):
+                raise ValueError("Login response did not contain tokenAttrs.LOGIN.token")
+            else:
+                self.registration = True
+                raise NeedRegistration()
         self._token = token
         self._database.update_auth_token(self._device_id, token)
         if start:
