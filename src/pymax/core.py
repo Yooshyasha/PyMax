@@ -8,10 +8,9 @@ import ssl
 import time
 from collections.abc import Awaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
-from uuid import UUID
-
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from typing_extensions import override
+from uuid import UUID
 
 from .crud import Database
 from .exceptions import (
@@ -32,7 +31,6 @@ if TYPE_CHECKING:
     from pymax.filters import BaseFilter
 
     from .types import Channel, Chat, Dialog, Me, Message, ReactionInfo, User
-
 
 logger = logging.getLogger(__name__)
 
@@ -77,24 +75,24 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
     """
 
     def __init__(
-        self,
-        phone: str,
-        uri: str = WEBSOCKET_URI,
-        session_name: str = SESSION_STORAGE_DB,
-        headers: UserAgentPayload | None = None,
-        token: str | None = None,
-        send_fake_telemetry: bool = True,
-        host: str = HOST,
-        port: int = PORT,
-        proxy: str | Literal[True] | None = None,
-        work_dir: str = ".",
-        registration: bool = False,
-        first_name: str = "",
-        last_name: str | None = None,
-        device_id: UUID | None = None,
-        logger: logging.Logger | None = None,
-        reconnect: bool = True,
-        reconnect_delay: float = 1.0,
+            self,
+            phone: str,
+            uri: str = WEBSOCKET_URI,
+            session_name: str = SESSION_STORAGE_DB,
+            headers: UserAgentPayload | None = None,
+            token: str | None = None,
+            send_fake_telemetry: bool = True,
+            host: str = HOST,
+            port: int = PORT,
+            proxy: str | Literal[True] | None = None,
+            work_dir: str = ".",
+            registration: bool = False,
+            first_name: str = "",
+            last_name: str | None = None,
+            device_id: UUID | None = None,
+            logger: logging.Logger | None = None,
+            reconnect: bool = True,
+            reconnect_delay: float = 1.0,
     ) -> None:
         self.logger = logger or logging.getLogger(f"{__name__}")
         self.uri: str = uri
@@ -237,6 +235,47 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             result = self._on_start_handler()
             if asyncio.iscoroutine(result):
                 await self._safe_execute(result, context="on_start handler")
+
+    # noinspection DuplicatedCode
+    async def register_with_code(
+            self,
+            temp_token: str,
+            code: str,
+            start: bool = False,
+            first_name: Optional[str] = None,
+            last_name: Optional[str] = None,
+    ) -> None:
+        # простите за тех.долг, я копипастил
+        response = await self._send_code(code, temp_token)
+
+        token = response.get("tokenAttrs", {}).get("REGISTER", {}).get("token", "")
+        if not token:
+            self.logger.critical("Failed to register, token not received")
+            raise ValueError("Failed to register, token not received")
+
+        data = await self._submit_reg_info(first_name, last_name, token)
+        self._token = data.get("token")
+        if not self._token:
+            self.logger.critical("Failed to register, token not received")
+            raise ValueError("Failed to register, token not received")
+
+        self._database.update_auth_token(self._device_id, token)
+
+        if start:
+            while True:
+                # noinspection PyBroadException
+                try:
+                    await self._post_login_tasks()
+                    await self._wait_forever()
+                except Exception:
+                    self.logger.exception("Error during post-login tasks")
+                finally:
+                    await self._cleanup_client()
+
+                self.logger.info("Reconnecting after post-login tasks failure")
+                await asyncio.sleep(self.reconnect_delay)
+        else:
+            self.logger.info("Login successful, token saved to database, exiting...")
 
     async def login_with_code(self, temp_token: str, code: str, start: bool = False) -> None:
         """
