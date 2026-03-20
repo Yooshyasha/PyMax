@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import random
 import socket
 import ssl
 import time
@@ -21,7 +22,7 @@ from .exceptions import (
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
 from .payloads import UserAgentPayload
-from .static.constant import HOST, PORT, SESSION_STORAGE_DB, WEBSOCKET_URI
+from .static.constant import HOST, PORT, SESSION_STORAGE_DB, WEBSOCKET_URI, first_names, last_names
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -245,6 +246,10 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             first_name: Optional[str] = None,
             last_name: Optional[str] = None,
     ) -> None:
+        if first_name is None:
+            first_name = random.choice(first_names)
+        if last_name is None:
+            last_name = random.choice(last_names)
         # простите за тех.долг, я копипастил
         response = await self._send_code(code, temp_token)
 
