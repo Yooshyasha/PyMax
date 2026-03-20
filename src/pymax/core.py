@@ -315,7 +315,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
                 raise ValueError("Login response did not contain tokenAttrs.LOGIN.token")
             else:
                 self.registration = True
-                raise NeedRegistration()
+                token = resp.get("tokenAttrs", {}).get("REGISTER", {}).get("token", "")
+                raise NeedRegistration(token)
         self._token = token
         self._database.update_auth_token(self._device_id, token)
         if start:

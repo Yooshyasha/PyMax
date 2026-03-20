@@ -1,3 +1,6 @@
+from typing import Any
+
+
 class InvalidPhoneError(Exception):
     """
     Исключение, вызываемое при неверном формате номера телефона.
@@ -109,5 +112,6 @@ class LoginError(Error):
 
 
 class NeedRegistration(LoginError):
-    def __init__(self):
+    def __init__(self, token: Any):
+        self.auth_token = token
         super().__init__("Need registration", "", "Registration", "Нужна регистрация")
