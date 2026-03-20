@@ -5,7 +5,6 @@ import sys
 from typing import Any
 
 import qrcode
-
 from pymax.exceptions import Error
 from pymax.payloads import (
     Capability,
@@ -247,9 +246,9 @@ class AuthMixin(ClientProtocol):
             else:
                 exp_at = status.get("expiresAt")
                 if (
-                    exp_at
-                    and isinstance(exp_at, (int, float))
-                    and exp_at < datetime.datetime.now().timestamp() * 1000
+                        exp_at
+                        and isinstance(exp_at, (int, float))
+                        and exp_at < datetime.datetime.now().timestamp() * 1000
                 ):
                     self.logger.warning("QR code expired")
                     return False
@@ -323,7 +322,7 @@ class AuthMixin(ClientProtocol):
                     raise RuntimeError("QR login failed or expired")
 
     async def _submit_reg_info(
-        self, first_name: str, last_name: str | None, token: str
+            self, first_name: str, last_name: str | None, token: str
     ) -> dict[str, Any]:
         try:
             self.logger.info("Submitting registration info")
@@ -357,7 +356,7 @@ class AuthMixin(ClientProtocol):
         request_code_payload = await self.request_code(self.phone)
         temp_token = request_code_payload
 
-        if not temp_token or not isinstance(temp_token, str):
+        if not isinstance(temp_token, str):
             self.logger.critical("Failed to request code: token missing")
             raise ValueError("Failed to request code")
 
@@ -489,10 +488,10 @@ class AuthMixin(ClientProtocol):
             return True
 
     async def set_password(
-        self,
-        password: str,
-        email: str | None = None,
-        hint: str | None | _Unset = UNSET,
+            self,
+            password: str,
+            email: str | None = None,
+            hint: str | None | _Unset = UNSET,
     ):
         """
         Устанавливает пароль для аккаунта

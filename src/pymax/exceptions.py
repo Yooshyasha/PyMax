@@ -1,3 +1,6 @@
+from typing import Any
+
+
 class InvalidPhoneError(Exception):
     """
     Исключение, вызываемое при неверном формате номера телефона.
@@ -63,11 +66,11 @@ class Error(Exception):
     """
 
     def __init__(
-        self,
-        error: str,
-        message: str,
-        title: str,
-        localized_message: str | None = None,
+            self,
+            error: str,
+            message: str,
+            title: str,
+            localized_message: str | None = None,
     ) -> None:
         self.error = error
         self.message = message
@@ -92,7 +95,7 @@ class RateLimitError(Error):
     """
 
     def __init__(
-        self, error: str, message: str, title: str, localized_message: str | None = None
+            self, error: str, message: str, title: str, localized_message: str | None = None
     ) -> None:
         super().__init__(error, message, title, localized_message)
 
@@ -103,6 +106,12 @@ class LoginError(Error):
     """
 
     def __init__(
-        self, error: str, message: str, title: str, localized_message: str | None = None
+            self, error: str, message: str, title: str, localized_message: str | None = None
     ) -> None:
         super().__init__(error, message, title, localized_message)
+
+
+class NeedRegistration(LoginError):
+    def __init__(self, token: Any):
+        self.auth_token = token
+        super().__init__("Need registration", "", "Registration", "Нужна регистрация")

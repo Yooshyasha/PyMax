@@ -3,26 +3,26 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import random
 import socket
 import ssl
 import time
 from collections.abc import Awaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
-from uuid import UUID
-
+from typing import TYPE_CHECKING, Any, Literal, Optional
 from typing_extensions import override
+from uuid import UUID
 
 from .crud import Database
 from .exceptions import (
     InvalidPhoneError,
     SocketNotConnectedError,
-    WebSocketNotConnectedError,
+    WebSocketNotConnectedError, NeedRegistration,
 )
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
 from .payloads import UserAgentPayload
-from .static.constant import HOST, PORT, SESSION_STORAGE_DB, WEBSOCKET_URI
+from .static.constant import HOST, PORT, SESSION_STORAGE_DB, WEBSOCKET_URI, first_names, last_names
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from pymax.filters import BaseFilter
 
     from .types import Channel, Chat, Dialog, Me, Message, ReactionInfo, User
-
 
 logger = logging.getLogger(__name__)
 
@@ -77,24 +76,24 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
     """
 
     def __init__(
-        self,
-        phone: str,
-        uri: str = WEBSOCKET_URI,
-        session_name: str = SESSION_STORAGE_DB,
-        headers: UserAgentPayload | None = None,
-        token: str | None = None,
-        send_fake_telemetry: bool = True,
-        host: str = HOST,
-        port: int = PORT,
-        proxy: str | Literal[True] | None = None,
-        work_dir: str = ".",
-        registration: bool = False,
-        first_name: str = "",
-        last_name: str | None = None,
-        device_id: UUID | None = None,
-        logger: logging.Logger | None = None,
-        reconnect: bool = True,
-        reconnect_delay: float = 1.0,
+            self,
+            phone: str,
+            uri: str = WEBSOCKET_URI,
+            session_name: str = SESSION_STORAGE_DB,
+            headers: UserAgentPayload | None = None,
+            token: str | None = None,
+            send_fake_telemetry: bool = True,
+            host: str = HOST,
+            port: int = PORT,
+            proxy: str | Literal[True] | None = None,
+            work_dir: str = ".",
+            registration: bool = False,
+            first_name: str = "",
+            last_name: str | None = None,
+            device_id: UUID | None = None,
+            logger: logging.Logger | None = None,
+            reconnect: bool = True,
+            reconnect_delay: float = 1.0,
     ) -> None:
         self.logger = logger or logging.getLogger(f"{__name__}")
         self.uri: str = uri
@@ -238,6 +237,62 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             if asyncio.iscoroutine(result):
                 await self._safe_execute(result, context="on_start handler")
 
+    # noinspection DuplicatedCode
+    async def register_with_code(
+            self,
+            temp_token: str,
+            code: str,
+            start: bool = False,
+            first_name: Optional[str] = None,
+            last_name: Optional[str] = None,
+    ) -> None:
+        # простите за тех.долг, я копипастил
+        response = await self._send_code(code, temp_token)
+
+        token = response.get("tokenAttrs", {}).get("REGISTER", {}).get("token", "")
+        if not token:
+            self.logger.critical("Failed to register, token not received")
+            raise ValueError("Failed to register, token not received")
+
+        await self.continue_register(token, first_name, last_name)
+
+        if start:
+            # чувак, если ты будешь это читать, то нельзя делать одну функцию и логином и рантаймом;
+            # честно, воняет, но я все понимаю и не виню
+            while True:
+                # noinspection PyBroadException
+                try:
+                    await self._post_login_tasks()
+                    await self._wait_forever()
+                except Exception:
+                    self.logger.exception("Error during post-login tasks")
+                finally:
+                    await self._cleanup_client()
+
+                self.logger.info("Reconnecting after post-login tasks failure")
+                await asyncio.sleep(self.reconnect_delay)
+        else:
+            self.logger.info("Login successful, token saved to database, exiting...")
+
+    async def continue_register(
+            self,
+            token: str,
+            first_name: Optional[str] = None,
+            last_name: Optional[str] = None,
+    ):
+        if first_name is None:
+            first_name = random.choice(first_names)
+        if last_name is None:
+            last_name = random.choice(last_names)
+
+        data = await self._submit_reg_info(first_name, last_name, token)
+        self._token = data.get("token")
+        if not self._token:
+            self.logger.critical("Failed to register, token not received")
+            raise ValueError("Failed to register, token not received")
+
+        self._database.update_auth_token(self._device_id, self._token)
+
     async def login_with_code(self, temp_token: str, code: str, start: bool = False) -> None:
         """
         Завершает кастомный login flow: отправляет код, сохраняет токен и запускает пост-логин задачи.
@@ -251,6 +306,9 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         :return: None
         :rtype: None
         """
+        if self.registration:
+            raise ValueError("Session should register")
+
         resp = await self._send_code(code, temp_token)
 
         login_attrs = resp.get("tokenAttrs", {}).get("LOGIN", {})
@@ -262,7 +320,12 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             token = login_attrs.get("token")
 
         if not token:
-            raise ValueError("Login response did not contain tokenAttrs.LOGIN.token")
+            if not resp.get("tokenAttrs", {}).get("REGISTER"):
+                raise ValueError("Login response did not contain tokenAttrs.LOGIN.token")
+            else:
+                self.registration = True
+                token = resp.get("tokenAttrs", {}).get("REGISTER", {}).get("token", "")
+                raise NeedRegistration(token)
         self._token = token
         self._database.update_auth_token(self._device_id, token)
         if start:
