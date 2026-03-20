@@ -259,7 +259,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             self.logger.critical("Failed to register, token not received")
             raise ValueError("Failed to register, token not received")
 
-        self._database.update_auth_token(self._device_id, token)
+        self._database.update_auth_token(self._device_id, self._token)
 
         if start:
             while True:
