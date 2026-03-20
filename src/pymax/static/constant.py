@@ -3,9 +3,8 @@ from re import Pattern, compile
 from typing import Final
 
 import ua_generator
-from websockets.typing import Origin
-
 from pymax.utils import MixinsUtils
+from websockets.typing import Origin
 
 DEVICE_NAMES: Final[list[str]] = [
     "Chrome",
@@ -64,7 +63,6 @@ TIMEZONES: Final[list[str]] = [
     "Asia/Kamchatka",
 ]
 
-
 PHONE_REGEX: Final[Pattern[str]] = compile(r"^\+?\d{10,15}$")
 WEBSOCKET_URI: Final[str] = "wss://ws-api.oneme.ru/websocket"
 SESSION_STORAGE_DB = "session.db"
@@ -94,3 +92,13 @@ class _Unset:
 
 
 UNSET = _Unset()
+
+first_names = [
+    "Алексей", "Мария", "Иван", "Екатерина", "Дмитрий",
+    "Ольга", "Сергей", "Анна", "Никита", "Татьяна"
+]
+
+last_names = [
+    "Иванов", "Петрова", "Смирнов", "Кузнецова", "Попов",
+    "Васильева", "Михайлов", "Федорова", "Соколов", "Морозова"
+]
