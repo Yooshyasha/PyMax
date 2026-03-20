@@ -290,6 +290,9 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         :return: None
         :rtype: None
         """
+        if self.registration:
+            raise ValueError("Session should register")
+
         resp = await self._send_code(code, temp_token)
 
         login_attrs = resp.get("tokenAttrs", {}).get("LOGIN", {})
