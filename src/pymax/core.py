@@ -246,10 +246,6 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             first_name: Optional[str] = None,
             last_name: Optional[str] = None,
     ) -> None:
-        if first_name is None:
-            first_name = random.choice(first_names)
-        if last_name is None:
-            last_name = random.choice(last_names)
         # простите за тех.долг, я копипастил
         response = await self._send_code(code, temp_token)
 
@@ -258,13 +254,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             self.logger.critical("Failed to register, token not received")
             raise ValueError("Failed to register, token not received")
 
-        data = await self._submit_reg_info(first_name, last_name, token)
-        self._token = data.get("token")
-        if not self._token:
-            self.logger.critical("Failed to register, token not received")
-            raise ValueError("Failed to register, token not received")
-
-        self._database.update_auth_token(self._device_id, self._token)
+        await self.continue_register(token, first_name, last_name)
 
         if start:
             # чувак, если ты будешь это читать, то нельзя делать одну функцию и логином и рантаймом;
@@ -283,6 +273,25 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
                 await asyncio.sleep(self.reconnect_delay)
         else:
             self.logger.info("Login successful, token saved to database, exiting...")
+
+    async def continue_register(
+            self,
+            token: str,
+            first_name: Optional[str] = None,
+            last_name: Optional[str] = None,
+    ):
+        if first_name is None:
+            first_name = random.choice(first_names)
+        if last_name is None:
+            last_name = random.choice(last_names)
+
+        data = await self._submit_reg_info(first_name, last_name, token)
+        self._token = data.get("token")
+        if not self._token:
+            self.logger.critical("Failed to register, token not received")
+            raise ValueError("Failed to register, token not received")
+
+        self._database.update_auth_token(self._device_id, self._token)
 
     async def login_with_code(self, temp_token: str, code: str, start: bool = False) -> None:
         """
