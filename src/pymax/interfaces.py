@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import ssl
 import time
 import traceback
 from abc import abstractmethod
@@ -52,7 +53,7 @@ class BaseClient(ClientProtocol):
             self.logger.error(f"Unhandled exception in {context}: {e}\n{traceback.format_exc()}")
 
     def _create_safe_task(
-        self, coro: Awaitable[Any], name: str | None = None
+            self, coro: Awaitable[Any], name: str | None = None
     ) -> asyncio.Task[Any | None]:
         async def runner():
             try:
@@ -167,23 +168,26 @@ class BaseClient(ClientProtocol):
 class BaseTransport(ClientProtocol):
     @abstractmethod
     async def connect(
-        self, user_agent: UserAgentPayload | None = None
-    ) -> dict[str, Any] | None: ...
+            self, user_agent: UserAgentPayload | None = None
+    ) -> dict[str, Any] | None:
+        ...
 
     @abstractmethod
     async def _send_and_wait(
-        self,
-        opcode: Opcode,
-        payload: dict[str, Any],
-        cmd: int = 0,
-        timeout: float = DEFAULT_TIMEOUT,
-    ) -> dict[str, Any]: ...
+            self,
+            opcode: Opcode,
+            payload: dict[str, Any],
+            cmd: int = 0,
+            timeout: float = DEFAULT_TIMEOUT,
+    ) -> dict[str, Any]:
+        ...
 
     @abstractmethod
-    async def _recv_loop(self) -> None: ...
+    async def _recv_loop(self) -> None:
+        ...
 
     def _make_message(
-        self, opcode: Opcode, payload: dict[str, Any], cmd: int = 0
+            self, opcode: Opcode, payload: dict[str, Any], cmd: int = 0
     ) -> dict[str, Any]:
         self._seq += 1
 
@@ -233,10 +237,10 @@ class BaseTransport(ClientProtocol):
         return resp
 
     async def _process_message_handler(
-        self,
-        handler: Callable[[Message], Any],
-        filter: BaseFilter[Message] | None,
-        message: Message,
+            self,
+            handler: Callable[[Message], Any],
+            filter: BaseFilter[Message] | None,
+            message: Message,
     ):
         result = None
         if filter:
@@ -392,12 +396,12 @@ class BaseTransport(ClientProtocol):
             self.logger.exception("Error retrieving task exception: %s", e)
 
     async def _queue_message(
-        self,
-        opcode: int,
-        payload: dict[str, Any],
-        cmd: int = 0,
-        timeout: float = DEFAULT_TIMEOUT,
-        max_retries: int = 3,
+            self,
+            opcode: int,
+            payload: dict[str, Any],
+            cmd: int = 0,
+            timeout: float = DEFAULT_TIMEOUT,
+            max_retries: int = 3,
     ) -> None:
         if self._outgoing is None:
             self.logger.warning("Outgoing queue not initialized")
@@ -489,7 +493,7 @@ class BaseTransport(ClientProtocol):
         elif isinstance(error, WebSocketNotConnectedError):
             return 2.0
         else:
-            return float(2**retry_count)
+            return float(2 ** retry_count)
 
     async def _sync(self, user_agent: UserAgentPayload | None = None) -> None:
         self.logger.info("Starting initial sync")

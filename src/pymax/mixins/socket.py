@@ -2,8 +2,6 @@ import asyncio
 import socket
 import ssl
 import sys
-import time
-from collections.abc import Callable
 from typing import Any
 
 import lz4.block
@@ -11,26 +9,16 @@ import msgpack
 from python_socks.async_.asyncio import Proxy
 from typing_extensions import override
 
-from pymax.exceptions import Error, SocketNotConnectedError, SocketSendError
-from pymax.filters import BaseFilter
+from pymax.exceptions import SocketNotConnectedError, SocketSendError
 from pymax.interfaces import BaseTransport
-from pymax.payloads import BaseWebSocketMessage, SyncPayload, UserAgentPayload
-from pymax.protocols import ClientProtocol
+from pymax.payloads import UserAgentPayload
 from pymax.static.constant import (
-    DEFAULT_PING_INTERVAL,
     DEFAULT_TIMEOUT,
     RECV_LOOP_BACKOFF_DELAY,
 )
-from pymax.static.enum import ChatType, MessageStatus, Opcode
+from pymax.static.enum import Opcode
 from pymax.types import (
-    Channel,
     Chat,
-    Dialog,
-    Me,
-    Message,
-    ReactionCounter,
-    ReactionInfo,
-    User,
 )
 
 
@@ -81,7 +69,7 @@ class SocketMixin(BaseTransport):
         packed_len = int.from_bytes(data[6:10], "big", signed=False)
         comp_flag = packed_len >> 24
         payload_length = packed_len & 0xFFFFFF
-        payload_bytes = data[10 : 10 + payload_length]
+        payload_bytes = data[10: 10 + payload_length]
 
         payload = None
         if payload_bytes:
@@ -107,12 +95,12 @@ class SocketMixin(BaseTransport):
         }
 
     def _pack_packet(
-        self,
-        ver: int,
-        cmd: int,
-        seq: int,
-        opcode: int,
-        payload: dict[str, Any],
+            self,
+            ver: int,
+            cmd: int,
+            seq: int,
+            opcode: int,
+            payload: dict[str, Any],
     ) -> bytes:
         ver_b = ver.to_bytes(1, "big")
         cmd_b = cmd.to_bytes(2, "big")
@@ -148,7 +136,8 @@ Socket connections may be unstable, SSL issues are possible.
             )
         self.logger.info("Connecting to socket %s:%s", self.host, self.port)
         raw_sock = await self._create_raw_socket()
-        self._socket = self._ssl_context.wrap_socket(raw_sock, server_hostname=self.host)
+        self._socket = self._ssl_context.wrap_socket(raw_sock, server_hostname=self.host, do_handshake_on_connect=False)
+        await self._do_ssl_handshake()
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.is_connected = True
         self._incoming = asyncio.Queue()
@@ -158,6 +147,18 @@ Socket connections may be unstable, SSL issues are possible.
         self._outgoing_task = asyncio.create_task(self._outgoing_loop())
         self.logger.info("Socket connected, starting handshake")
         return await self._handshake(user_agent)
+
+    async def _do_ssl_handshake(self):
+        while True:
+            try:
+                # noinspection PyUnresolvedReferences
+                # оно будет sslcontext
+                self._socket.do_handshake()
+                return
+            except ssl.SSLWantReadError:
+                await asyncio.sleep(0)
+            except ssl.SSLWantWriteError:
+                await asyncio.sleep(0)
 
     def _recv_exactly(self, sock: socket.socket, n: int) -> bytes:
         buf = bytearray()
@@ -169,7 +170,7 @@ Socket connections may be unstable, SSL issues are possible.
         return bytes(buf)
 
     async def _parse_header(
-        self, loop: asyncio.AbstractEventLoop, sock: socket.socket
+            self, loop: asyncio.AbstractEventLoop, sock: socket.socket
     ) -> bytes | None:
         header = await loop.run_in_executor(None, lambda: self._recv_exactly(sock=sock, n=10))
         if not header or len(header) < 10:
@@ -183,7 +184,7 @@ Socket connections may be unstable, SSL issues are possible.
         return header
 
     async def _recv_data(
-        self, loop: asyncio.AbstractEventLoop, header: bytes, sock: socket.socket
+            self, loop: asyncio.AbstractEventLoop, header: bytes, sock: socket.socket
     ) -> list[dict[str, Any]] | None:
         packed_len = int.from_bytes(header[6:10], "big", signed=False)
         payload_length = packed_len & 0xFFFFFF
@@ -265,11 +266,11 @@ Socket connections may be unstable, SSL issues are possible.
 
     @override
     async def _send_and_wait(
-        self,
-        opcode: Opcode,
-        payload: dict[str, Any],
-        cmd: int = 0,
-        timeout: float = DEFAULT_TIMEOUT,
+            self,
+            opcode: Opcode,
+            payload: dict[str, Any],
+            cmd: int = 0,
+            timeout: float = DEFAULT_TIMEOUT,
     ) -> dict[str, Any]:
         if not self.is_connected or self._socket is None:
             raise SocketNotConnectedError
