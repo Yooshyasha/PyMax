@@ -8,6 +8,7 @@ from typing import Any
 
 import lz4.block
 import msgpack
+from python_socks.async_.asyncio import Proxy
 from typing_extensions import override
 
 from pymax.exceptions import Error, SocketNotConnectedError, SocketSendError
@@ -34,6 +35,37 @@ from pymax.types import (
 
 
 class SocketMixin(BaseTransport):
+    def _resolve_proxy_url(self) -> str | None:
+        """Возвращает URL прокси для текущего соединения.
+
+        :return: URL прокси или None, если прокси не задан.
+        :rtype: str | None
+        """
+        if isinstance(self.proxy, str):
+            return self.proxy
+        return None
+
+    async def _create_raw_socket(self) -> socket.socket:
+        """Создаёт сырой TCP-сокет с учётом настроек прокси.
+
+        Если прокси не задан — устанавливает прямое соединение.
+        Если задан URL прокси (SOCKS4/SOCKS5/HTTP) или proxy=True —
+        соединение устанавливается через прокси-сервер.
+
+        :return: Подключённый сокет.
+        :rtype: socket.socket
+        """
+        proxy_url = self._resolve_proxy_url()
+        if proxy_url is not None:
+            self.logger.info("Connecting via proxy: %s", proxy_url)
+            proxy = Proxy.from_url(proxy_url)
+            return await proxy.connect(dest_host=self.host, dest_port=self.port)
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: socket.create_connection((self.host, self.port))
+        )
+
     @property
     def sock(self) -> socket.socket:
         if self._socket is None or not self.is_connected:
@@ -115,10 +147,7 @@ Socket connections may be unstable, SSL issues are possible.
     """
             )
         self.logger.info("Connecting to socket %s:%s", self.host, self.port)
-        loop = asyncio.get_running_loop()
-        raw_sock = await loop.run_in_executor(
-            None, lambda: socket.create_connection((self.host, self.port))
-        )
+        raw_sock = await self._create_raw_socket()
         self._socket = self._ssl_context.wrap_socket(raw_sock, server_hostname=self.host)
         self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.is_connected = True
