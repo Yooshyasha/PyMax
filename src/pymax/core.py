@@ -459,3 +459,67 @@ class SocketMaxClient(SocketMixin, MaxClient):
 
         self.is_connected = False
         self.logger.info("Client start() cleaned up (socket)")
+
+
+async def web_max_client_from_socket(
+    socket_client: SocketMaxClient,
+    *,
+    qr_link: str | None = None,
+    web_work_dir: str | None = None,
+    **max_client_kwargs: Any,
+) -> MaxClient:
+    """
+    Создаёт :class:`MaxClient` с ``device_type=WEB`` и новой сессией.
+
+    Два режима:
+
+    * ``qr_link`` задан — строка из QR, показанного **WEB**-клиентом при своём
+      ``GET_QR``: уже залогиненный сокет вызывает
+      :meth:`~pymax.mixins.auth.AuthMixin.authorize_qr_link` (опкоды **1 → 96 → 290**),
+      после чего из ответа извлекается токен (если сервер отдаёт его в этом payload).
+    * ``qr_link`` не задан — прежний сценарий: на сокете выполняется
+      :meth:`~pymax.mixins.auth.AuthMixin._login_by_qr` (``GET_QR`` / опрос /
+      ``LOGIN_BY_QR``), QR рисуется в консоли сокет-клиента.
+
+    Для WEB-сессии по умолчанию используется ``<work_dir>/web_session``, чтобы не
+    перезаписать ``session.db`` сокета.
+
+    :raises ValueError: Нет подключения/токена сокета или нет токена в ответе.
+    """
+    if not socket_client.is_connected:
+        raise ValueError("SocketMaxClient must be connected")
+    if not socket_client._token:
+        raise ValueError("SocketMaxClient must be authenticated")
+
+    if qr_link is not None:
+        login_resp = await socket_client.authorize_qr_link(qr_link)
+    else:
+        login_resp = await socket_client._login_by_qr()
+
+    password_challenge = login_resp.get("passwordChallenge")
+    login_attrs = login_resp.get("tokenAttrs", {}).get("LOGIN", {})
+
+    if password_challenge and not login_attrs:
+        token = await socket_client._two_factor_auth(password_challenge)
+    else:
+        token = login_attrs.get("token")
+
+    if not token:
+        raise ValueError(
+            "WEB session token not received after QR flow. "
+            "If you only sent authorize_qr_link (290), complete LOGIN_BY_QR on the WEB client "
+            "or use web_max_client_from_socket without qr_link."
+        )
+
+    work_dir = (
+        web_work_dir
+        if web_work_dir is not None
+        else str(Path(socket_client._work_dir) / "web_session")
+    )
+
+    return MaxClient(
+        phone=socket_client.phone,
+        token=token,
+        work_dir=work_dir,
+        **max_client_kwargs,
+    )

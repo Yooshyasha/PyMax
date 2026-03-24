@@ -5,6 +5,7 @@ Python wrapper для API мессенджера Max
 from .core import (
     MaxClient,
     SocketMaxClient,
+    web_max_client_from_socket,
 )
 from .exceptions import (
     InvalidPhoneError,
@@ -86,6 +87,7 @@ __all__ = [
     "MarkupType",
     # Клиент
     "MaxClient",
+    "web_max_client_from_socket",
     "Me",
     "Member",
     "Message",

@@ -143,6 +143,7 @@ class Opcode(int, Enum):
 
     GET_QR = 288  # ✅
     GET_QR_STATUS = 289  # ✅
+    AUTHORIZE_QR = 290  # ✅
     LOGIN_BY_QR = 291  # ✅
 
 
