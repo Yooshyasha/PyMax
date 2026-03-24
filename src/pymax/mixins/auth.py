@@ -5,7 +5,7 @@ import sys
 from typing import Any
 
 import qrcode
-from pymax.exceptions import Error
+
 from pymax.payloads import (
     Capability,
     CheckPasswordChallengePayload,
@@ -175,6 +175,33 @@ class AuthMixin(ClientProtocol):
         else:
             self.logger.error("Invalid payload data received")
             raise ValueError("Invalid payload data received")
+
+    async def authorize_qr_link(self, qr_link: str) -> dict[str, Any]:
+        self.logger.info("Authorizing external QR login")
+
+        ping = await self._send_and_wait(
+            opcode=Opcode.PING,
+            payload={"interactive": True},
+        )
+        if ping.get("payload", {}).get("error"):
+            MixinsUtils.handle_error(ping)
+
+        sessions = await self._send_and_wait(opcode=Opcode.SESSIONS_INFO, payload={})
+        if sessions.get("payload", {}).get("error"):
+            MixinsUtils.handle_error(sessions)
+
+        data = await self._send_and_wait(
+            opcode=Opcode.AUTHORIZE_QR,
+            payload={"qrLink": qr_link},
+        )
+        if data.get("payload", {}).get("error"):
+            MixinsUtils.handle_error(data)
+
+        payload_data = data.get("payload")
+        if isinstance(payload_data, dict):
+            return payload_data
+        self.logger.error(f"Invalid AUTHORIZE_QR payload: {payload_data}")
+        raise ValueError("Invalid AUTHORIZE_QR payload")
 
     def _validate_version(self, version: str, min_version: str) -> bool:
         def version_tuple(v: str) -> tuple[int, ...]:
