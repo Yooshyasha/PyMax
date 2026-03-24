@@ -156,7 +156,7 @@ class AuthMixin(ClientProtocol):
 
         qr.print_ascii()
 
-    async def _request_qr_login(self) -> dict[str, Any]:
+    async def _request_qr_login(self) -> None:
         self.logger.info("Requesting QR login data")
 
         data = await self._send_and_wait(opcode=Opcode.GET_QR, payload={})
@@ -186,18 +186,18 @@ class AuthMixin(ClientProtocol):
 
         await self._send_and_wait(opcode=Opcode.SESSIONS_INFO, payload={})
 
-        data = await self._send_and_wait(
+        await self._send_and_wait(
             opcode=Opcode.AUTHORIZE_QR,
             payload={"qrLink": qr_link},
         )
-        if data.get("payload", {}).get("error"):
-            MixinsUtils.handle_error(data)
-
-        payload_data = data.get("payload")
-        if isinstance(payload_data, dict):
-            return payload_data
-        self.logger.error(f"Invalid AUTHORIZE_QR payload: {payload_data}")
-        raise ValueError("Invalid AUTHORIZE_QR payload")
+        # if data.get("payload", {}).get("error"):
+        #     MixinsUtils.handle_error(data)
+        #
+        # payload_data = data.get("payload")
+        # if isinstance(payload_data, dict):
+        #     return payload_data
+        # self.logger.error(f"Invalid AUTHORIZE_QR payload: {payload_data}")
+        # raise ValueError("Invalid AUTHORIZE_QR payload")
 
     def _validate_version(self, version: str, min_version: str) -> bool:
         def version_tuple(v: str) -> tuple[int, ...]:
