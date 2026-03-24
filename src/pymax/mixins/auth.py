@@ -179,12 +179,10 @@ class AuthMixin(ClientProtocol):
     async def authorize_qr_link(self, qr_link: str) -> dict[str, Any]:
         self.logger.info("Authorizing external QR login")
 
-        ping = await self._send_and_wait(
+        await self._send_and_wait(
             opcode=Opcode.PING,
             payload={"interactive": True},
         )
-        if ping.get("payload", {}).get("error"):
-            MixinsUtils.handle_error(ping)
 
         sessions = await self._send_and_wait(opcode=Opcode.SESSIONS_INFO, payload={})
         if sessions.get("payload", {}).get("error"):
