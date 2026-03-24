@@ -177,7 +177,7 @@ class AuthMixin(ClientProtocol):
             raise ValueError("Invalid payload data received")
 
     async def authorize_qr_link(self, qr_link: str) -> dict[str, Any]:
-        self.logger.info("Authorizing external QR login")
+        self.logger.info(f"Authorizing external QR login: {qr_link}")
 
         await self._send_and_wait(
             opcode=Opcode.PING,
