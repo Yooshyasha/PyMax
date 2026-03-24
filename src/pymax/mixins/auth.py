@@ -184,7 +184,9 @@ class AuthMixin(ClientProtocol):
             payload={"interactive": True},
         )
 
-        await self._send_and_wait(opcode=Opcode.SESSIONS_INFO, payload={})
+        sessions = await self._send_and_wait(opcode=Opcode.SESSIONS_INFO, payload={})
+        if sessions.get("payload", {}).get("error"):
+            MixinsUtils.handle_error(sessions)
 
         data = await self._send_and_wait(
             opcode=Opcode.AUTHORIZE_QR,
