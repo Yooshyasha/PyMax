@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime
 import logging
 import random
 import socket
@@ -502,13 +503,26 @@ async def web_max_client_from_socket(
 
         await socket_client.authorize_qr_link(link)
 
-        login_resp = await web._poll_qr_login(
-            track_id,
-            int(poll_interval),
-        )
+        now_ms = datetime.datetime.now().timestamp() * 1000
+        expires_ms = float(expires_at)
+        if now_ms >= expires_ms:
+            raise RuntimeError("QR code expired before polling")
+
+        poll_timeout_sec = (expires_ms - now_ms) / 1000.0
+        try:
+            confirmed = await asyncio.wait_for(
+                web._poll_qr_login(track_id, int(poll_interval)),
+                timeout=poll_timeout_sec,
+            )
+        except asyncio.TimeoutError:
+            raise RuntimeError("QR code expired before confirmation") from None
+        if not confirmed:
+            raise RuntimeError("QR login failed or expired")
+
+        login_resp = await web._get_qr_login_data(track_id)
 
         password_challenge = login_resp.get("passwordChallenge")
-        login_attrs = login_resp.get("tokenAttrs", {}).get("LOGIN", {})
+        login_attrs = (login_resp.get("tokenAttrs") or {}).get("LOGIN", {})
         if password_challenge and not login_attrs:
             raise ValueError(
                 "Account requires 2FA password; automatic WEB bootstrap from socket is not supported."
