@@ -502,10 +502,9 @@ async def web_max_client_from_socket(
 
         await socket_client.authorize_qr_link(link)
 
-        login_resp = await web._finish_qr_login_after_approval(
+        login_resp = await web._poll_qr_login(
             track_id,
             int(poll_interval),
-            float(expires_at),
         )
 
         password_challenge = login_resp.get("passwordChallenge")
