@@ -10,8 +10,9 @@ import time
 from collections.abc import Awaitable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
-from typing_extensions import override
 from uuid import UUID
+
+from typing_extensions import override
 
 from .crud import Database
 from .exceptions import (
@@ -462,54 +463,15 @@ class SocketMaxClient(SocketMixin, MaxClient):
 
 
 async def web_max_client_from_socket(
-    socket_client: SocketMaxClient,
-    *,
-    qr_link: str | None = None,
-    web_work_dir: str | None = None,
-    **max_client_kwargs: Any,
+        socket_client: SocketMaxClient,
+        *,
+        web_work_dir: str | None = None,
+        **max_client_kwargs: Any,
 ) -> MaxClient:
-    """
-    Создаёт :class:`MaxClient` с ``device_type=WEB`` и новой сессией.
-
-    Два режима:
-
-    * ``qr_link`` задан — строка из QR, показанного **WEB**-клиентом при своём
-      ``GET_QR``: уже залогиненный сокет вызывает
-      :meth:`~pymax.mixins.auth.AuthMixin.authorize_qr_link` (опкоды **1 → 96 → 290**),
-      после чего из ответа извлекается токен (если сервер отдаёт его в этом payload).
-    * ``qr_link`` не задан — прежний сценарий: на сокете выполняется
-      :meth:`~pymax.mixins.auth.AuthMixin._login_by_qr` (``GET_QR`` / опрос /
-      ``LOGIN_BY_QR``), QR рисуется в консоли сокет-клиента.
-
-    Для WEB-сессии по умолчанию используется ``<work_dir>/web_session``, чтобы не
-    перезаписать ``session.db`` сокета.
-
-    :raises ValueError: Нет подключения/токена сокета или нет токена в ответе.
-    """
     if not socket_client.is_connected:
         raise ValueError("SocketMaxClient must be connected")
     if not socket_client._token:
         raise ValueError("SocketMaxClient must be authenticated")
-
-    if qr_link is not None:
-        login_resp = await socket_client.authorize_qr_link(qr_link)
-    else:
-        login_resp = await socket_client._login_by_qr()
-
-    password_challenge = login_resp.get("passwordChallenge")
-    login_attrs = login_resp.get("tokenAttrs", {}).get("LOGIN", {})
-
-    if password_challenge and not login_attrs:
-        token = await socket_client._two_factor_auth(password_challenge)
-    else:
-        token = login_attrs.get("token")
-
-    if not token:
-        raise ValueError(
-            "WEB session token not received after QR flow. "
-            "If you only sent authorize_qr_link (290), complete LOGIN_BY_QR on the WEB client "
-            "or use web_max_client_from_socket without qr_link."
-        )
 
     work_dir = (
         web_work_dir
@@ -517,9 +479,49 @@ async def web_max_client_from_socket(
         else str(Path(socket_client._work_dir) / "web_session")
     )
 
-    return MaxClient(
+    web = MaxClient(
         phone=socket_client.phone,
-        token=token,
         work_dir=work_dir,
+        token=None,
         **max_client_kwargs,
     )
+
+    if not web._validate_version(web.user_agent.app_version, "25.12.13"):
+        raise ValueError("Your app version is too old for WEB QR login")
+
+    await web.connect(web.user_agent)
+    try:
+        qr_data = await web._request_qr_login()
+        poll_interval = qr_data.get("pollingInterval")
+        link = qr_data.get("qrLink")
+        track_id = qr_data.get("trackId")
+        expires_at = qr_data.get("expiresAt")
+
+        if not poll_interval or not link or not track_id or not expires_at:
+            raise ValueError("Invalid QR login data from GET_QR")
+
+        await socket_client.authorize_qr_link(link)
+
+        login_resp = await web._finish_qr_login_after_approval(
+            track_id,
+            int(poll_interval),
+            float(expires_at),
+        )
+
+        password_challenge = login_resp.get("passwordChallenge")
+        login_attrs = login_resp.get("tokenAttrs", {}).get("LOGIN", {})
+        if password_challenge and not login_attrs:
+            raise ValueError(
+                "Account requires 2FA password; automatic WEB bootstrap from socket is not supported."
+            )
+
+        token = login_attrs.get("token")
+        if not token:
+            raise ValueError("WEB session token not received after LOGIN_BY_QR")
+
+        web._token = token
+        web._database.update_auth_token(web._device_id, token)
+    finally:
+        await web._cleanup_client()
+
+    return web
