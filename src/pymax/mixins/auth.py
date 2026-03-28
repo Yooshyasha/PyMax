@@ -514,23 +514,20 @@ class AuthMixin(ClientProtocol):
             self,
             password: str,
             email: str | None = None,
-            hint: str | None | _Unset = UNSET,
-    ):
+            hint: str | None = None,
+    ) -> bool:
         """
-        Устанавливает пароль для аккаунта
+        Устанавливает пароль для аккаунта.
 
         .. warning::
             Метод не будет работать, если на аккаунте уже установлен пароль.
 
         :param password: Новый пароль для аккаунта.
-        :type password: str
-        :param email: Адрес электронной почты для восстановления пароля.
-        :type email: str
-        :param hint: Подсказка для пароля. По умолчанию None.
-        :type hint: str | None
-        :return: None
-        :rtype: None
+        :param email: Email для восстановления.
+        :param hint: Подсказка для пароля.
+        :return: True при успехе.
         """
+
         self.logger.info("Setting account password")
 
         payload = CreateTrackPayload().model_dump(by_alias=True)
@@ -539,78 +536,62 @@ class AuthMixin(ClientProtocol):
             opcode=Opcode.AUTH_CREATE_TRACK,
             payload=payload,
         )
-        print(data)
-        if data.get("payload", {}).get("error"):
+
+        if not data or "payload" not in data:
+            raise RuntimeError("Invalid response while creating track")
+
+        if data["payload"].get("error"):
             MixinsUtils.handle_error(data)
 
-        track_id = data.get("payload", {}).get("trackId")
+        track_id = data["payload"].get("trackId")
         if not track_id:
-            self.logger.critical("Failed to create password track: track ID missing")
+            self.logger.critical("Track ID missing")
             raise ValueError("Failed to create password track")
 
-        while True:
-            if not password:
-                password = await asyncio.to_thread(lambda: input("Введите пароль: ").strip())
-                if not password:
-                    self.logger.warning("Password is empty, please try again")
-                    continue
-
-            success = await self._set_password(password, track_id)
-            if success:
+        for _ in range(3):
+            if await self._set_password(password, track_id):
                 self.logger.info("Password set successfully")
                 break
-            else:
-                self.logger.error("Failed to set password, please try again")
+        else:
+            raise RuntimeError("Failed to set password after retries")
 
-        while True:
-            if hint is UNSET:
-                hint = await asyncio.to_thread(
-                    lambda: input("Введите подсказку для пароля (пустая - пропустить): ").strip()
-                )
-                if not hint:
+        capabilities = [Capability.DEFAULT]
+
+        if hint is not None:
+            for _ in range(3):
+                if await self._set_hint(hint, track_id):
+                    self.logger.info("Password hint set successfully")
+                    capabilities.append(Capability.SECOND_FACTOR_HAS_HINT)
                     break
-
-            if hint is None:
-                break
-
-            success = await self._set_hint(hint, track_id)
-            if success:
-                self.logger.info("Password hint set successfully")
-                break
             else:
-                self.logger.error("Failed to set password hint, please try again")
+                raise RuntimeError("Failed to set hint after retries")
 
-        while True:
-            if not email:
-                email = await asyncio.to_thread(
-                    lambda: input("Введите email для восстановления пароля: ").strip()
-                )
-                if not email:
-                    self.logger.warning("Email is empty, please try again")
-                    continue
-
-            success = await self._set_email(email, track_id)
-            if success:
-                self.logger.info("Recovery email set successfully")
-                break
+        if email is not None:
+            for _ in range(3):
+                if await self._set_email(email, track_id):
+                    self.logger.info("Recovery email set successfully")
+                    capabilities.append(Capability.SECOND_FACTOR_HAS_EMAIL)
+                    break
+            else:
+                raise RuntimeError("Failed to set email after retries")
 
         payload = SetTwoFactorPayload(
-            expected_capabilities=[
-                Capability.DEFAULT,
-                Capability.SECOND_FACTOR_HAS_HINT,
-                Capability.SECOND_FACTOR_HAS_EMAIL,
-            ],
+            expected_capabilities=capabilities,
             track_id=track_id,
             password=password,
-            hint=hint if isinstance(hint, (str, type(None))) else None,
+            hint=hint,
         )
 
         data = await self._send_and_wait(
             opcode=Opcode.AUTH_SET_2FA,
             payload=payload.model_dump(by_alias=True),
         )
-        payload = data.get("payload", {})
-        if payload and payload.get("error"):
+
+        if not data or "payload" not in data:
+            raise RuntimeError("Invalid response while setting 2FA")
+
+        if data["payload"].get("error"):
             MixinsUtils.handle_error(data)
 
+        self.logger.info("2FA setup completed successfully")
         return True
