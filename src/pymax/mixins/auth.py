@@ -590,7 +590,7 @@ class AuthMixin(ClientProtocol):
         if not data or "payload" not in data:
             raise RuntimeError("Invalid response while setting 2FA")
 
-        if data["payload"].get("error"):
+        if data.get("payload", {}).get("error"):
             MixinsUtils.handle_error(data)
 
         self.logger.info("2FA setup completed successfully")
