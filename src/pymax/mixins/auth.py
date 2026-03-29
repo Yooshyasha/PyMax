@@ -583,7 +583,7 @@ class AuthMixin(ClientProtocol):
 
         data = await self._send_and_wait(
             opcode=Opcode.AUTH_SET_2FA,
-            payload=payload.model_dump(by_alias=True),
+            payload=payload.model_dump(by_alias=True, exclude_none=True),
         )
 
         if not data or "payload" not in data:
