@@ -5,6 +5,7 @@ import sys
 from typing import Any
 
 import qrcode
+
 from pymax.payloads import (
     Capability,
     CheckPasswordChallengePayload,
@@ -588,6 +589,9 @@ class AuthMixin(ClientProtocol):
 
         if not data or "payload" not in data:
             raise RuntimeError("Invalid response while setting 2FA")
+
+        if data["payload"].get("error"):
+            MixinsUtils.handle_error(data)
 
         self.logger.info("2FA setup completed successfully")
         return True
