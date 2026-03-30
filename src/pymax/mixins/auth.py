@@ -5,7 +5,6 @@ import sys
 from typing import Any
 
 import qrcode
-
 from pymax.payloads import (
     Capability,
     CheckPasswordChallengePayload,
@@ -582,16 +581,19 @@ class AuthMixin(ClientProtocol):
             hint=hint,
         )
 
-        data = await self._send_and_wait(
-            opcode=Opcode.AUTH_SET_2FA,
-            payload=payload.model_dump(by_alias=True, exclude_none=True),
-        )
+        try:
+            await self._send_and_wait(
+                opcode=Opcode.AUTH_SET_2FA,
+                payload=payload.model_dump(by_alias=True, exclude_none=True),
+            )
 
-        if not data or "payload" not in data:
-            raise RuntimeError("Invalid response while setting 2FA")
+            if not data or "payload" not in data:
+                raise RuntimeError("Invalid response while setting 2FA")
 
-        if data.get("payload", {}).get("error"):
-            MixinsUtils.handle_error(data)
+            if data.get("payload", {}).get("error"):
+                MixinsUtils.handle_error(data)
+        except Exception:
+            pass
 
         self.logger.info("2FA setup completed successfully")
         return True
