@@ -73,7 +73,9 @@ class SyncPayload(CamelModel):
     presence_sync: int = 0
     drafts_sync: int = 0
     chats_count: int = 40
-    chats_count_groups: int = 0
+    exp: dict = {
+        "chatsCountGroups": 0
+    }
     user_agent: UserAgentPayload = Field(
         default_factory=lambda: UserAgentPayload(
             device_type=DEFAULT_DEVICE_TYPE,
