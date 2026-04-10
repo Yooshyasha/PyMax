@@ -509,7 +509,6 @@ class BaseTransport(ClientProtocol):
             presence_sync=0,
             drafts_sync=0,
             chats_count=40,
-            chats_count_groups=0,
             user_agent=user_agent,
         ).model_dump(by_alias=True)
         try:
