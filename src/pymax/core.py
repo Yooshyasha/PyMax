@@ -23,7 +23,7 @@ from .exceptions import (
 )
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
-from .payloads import UserAgentPayload
+from .payloads import UserAgentPayload, generate_user_agent
 from .static.constant import HOST, PORT, SESSION_STORAGE_DB, WEBSOCKET_URI, first_names, last_names
 
 if TYPE_CHECKING:
@@ -187,7 +187,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
 
     @staticmethod
     def _default_headers() -> UserAgentPayload:
-        return UserAgentPayload(device_type="WEB")
+        return generate_user_agent("WEB")
 
     def _validate_device_type(self) -> None:
         if self.user_agent.device_type not in self.allowed_device_types:
@@ -408,7 +408,7 @@ class SocketMaxClient(SocketMixin, MaxClient):
 
     @staticmethod
     def _default_headers() -> UserAgentPayload:
-        return UserAgentPayload(device_type="DESKTOP")
+        return generate_user_agent("DESKTOP")
 
     @override
     async def _wait_forever(self):

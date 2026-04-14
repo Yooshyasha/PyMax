@@ -7,6 +7,7 @@ from .core import (
     SocketMaxClient,
     web_max_client_from_socket,
 )
+from .payloads import UserAgentPayload, generate_user_agent
 from .exceptions import (
     InvalidPhoneError,
     LoginError,
@@ -87,6 +88,8 @@ __all__ = [
     "MarkupType",
     # Клиент
     "MaxClient",
+    "UserAgentPayload",
+    "generate_user_agent",
     "web_max_client_from_socket",
     "Me",
     "Member",

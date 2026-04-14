@@ -1,8 +1,16 @@
+from __future__ import annotations
+
+import random
 from typing import Any, Literal
 
+import ua_generator
 from pydantic import AliasChoices, BaseModel, Field
 
 from pymax.static.constant import (
+    ANDROID_BUILD_TAGS,
+    ANDROID_DEVICES,
+    ANDROID_OS_VERSIONS,
+    CHROME_MOBILE_VERSIONS,
     DEFAULT_APP_VERSION,
     DEFAULT_BUILD_NUMBER,
     DEFAULT_CLIENT_SESSION_ID,
@@ -14,6 +22,10 @@ from pymax.static.constant import (
     DEFAULT_SCREEN,
     DEFAULT_TIMEZONE,
     DEFAULT_USER_AGENT,
+    DESKTOP_OS_POOL,
+    DESKTOP_SCREENS,
+    TIMEZONES,
+    WEB_BROWSERS,
 )
 from pymax.static.enum import AttachType, AuthType, Capability, ContactAction, ReadAction
 
@@ -51,6 +63,117 @@ class UserAgentPayload(CamelModel):
     timezone: str = Field(default=DEFAULT_TIMEZONE)
     client_session_id: int = Field(default=DEFAULT_CLIENT_SESSION_ID)
     build_number: int = Field(default=DEFAULT_BUILD_NUMBER)
+
+
+def _generate_android_ua() -> UserAgentPayload:
+    device = random.choice(ANDROID_DEVICES)
+    android_ver = random.choice(ANDROID_OS_VERSIONS)
+    chrome_ver = random.choice(CHROME_MOBILE_VERSIONS)
+    build_tag = random.choice(ANDROID_BUILD_TAGS)
+
+    header_ua = (
+        f"Mozilla/5.0 (Linux; Android {android_ver}; {device['model']}; "
+        f"Build/{build_tag}) AppleWebKit/537.36 (KHTML, like Gecko) "
+        f"Chrome/{chrome_ver} Mobile Safari/537.36"
+    )
+
+    return UserAgentPayload(
+        device_type="ANDROID",
+        os_version=f"Android {android_ver}",
+        device_name=device["name"],
+        header_user_agent=header_ua,
+        screen=device["screen"],
+        app_version=DEFAULT_APP_VERSION,
+        build_number=DEFAULT_BUILD_NUMBER,
+        timezone=random.choice(TIMEZONES),
+        client_session_id=random.randint(1, 15),
+    )
+
+
+def _generate_desktop_ua() -> UserAgentPayload:
+    os_info = random.choice(DESKTOP_OS_POOL)
+
+    ua_platform_map = {
+        "Windows": "windows",
+        "macOS": "macos",
+        "Linux": "linux",
+    }
+    ua_platform = ua_platform_map.get(os_info["device_name"], "windows")
+    ua = ua_generator.generate(device="desktop", platform=ua_platform, browser="chrome")
+
+    return UserAgentPayload(
+        device_type="DESKTOP",
+        os_version=os_info["os_version"],
+        device_name=os_info["device_name"],
+        header_user_agent=ua.text,
+        screen=random.choice(DESKTOP_SCREENS),
+        app_version=DEFAULT_APP_VERSION,
+        build_number=DEFAULT_BUILD_NUMBER,
+        timezone=random.choice(TIMEZONES),
+        client_session_id=random.randint(1, 15),
+    )
+
+
+def _generate_web_ua() -> UserAgentPayload:
+    browser_name = random.choice(WEB_BROWSERS)
+
+    browser_map = {
+        "Chrome": "chrome",
+        "Chromium": "chrome",
+        "Brave": "chrome",
+        "Vivaldi": "chrome",
+        "Opera": "chrome",
+        "Edge": "edge",
+        "Firefox": "firefox",
+        "Safari": "safari",
+    }
+    ua_browser = browser_map.get(browser_name, "chrome")
+    platform = ("windows", "macos", "linux")
+    if ua_browser == "safari":
+        platform = "macos"
+    ua = ua_generator.generate(device="desktop", platform=platform, browser=ua_browser)
+
+    os_label_map = {
+        "windows": random.choice(["Windows 10", "Windows 11"]),
+        "macos": random.choice(["macOS Sonoma", "macOS Ventura", "macOS Sequoia"]),
+        "linux": random.choice(["Ubuntu 22.04", "Ubuntu 24.04", "Fedora 40"]),
+    }
+    os_version = os_label_map.get(ua.platform, "Windows 10")
+
+    return UserAgentPayload(
+        device_type="WEB",
+        os_version=os_version,
+        device_name=browser_name,
+        header_user_agent=ua.text,
+        screen=random.choice(DESKTOP_SCREENS),
+        app_version=DEFAULT_APP_VERSION,
+        build_number=DEFAULT_BUILD_NUMBER,
+        timezone=random.choice(TIMEZONES),
+        client_session_id=random.randint(1, 15),
+    )
+
+
+_GENERATORS: dict[str, callable] = {
+    "ANDROID": _generate_android_ua,
+    "DESKTOP": _generate_desktop_ua,
+    "WEB": _generate_web_ua,
+}
+
+
+def generate_user_agent(
+    device_type: Literal["WEB", "DESKTOP", "ANDROID"] = "WEB",
+) -> UserAgentPayload:
+    """Generate a realistic :class:`UserAgentPayload` for the given *device_type*.
+
+    Supported device types: ``"WEB"``, ``"DESKTOP"``, ``"ANDROID"``.
+    """
+    gen = _GENERATORS.get(device_type)
+    if gen is None:
+        raise ValueError(
+            f"Unknown device_type={device_type!r}. "
+            f"Expected one of {set(_GENERATORS)}"
+        )
+    return gen()
 
 
 class RequestCodePayload(CamelModel):
