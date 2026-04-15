@@ -108,8 +108,8 @@ DEFAULT_TIMEOUT: Final[float] = 20.0
 DEFAULT_DEVICE_TYPE: Final[str] = "DESKTOP"
 DEFAULT_LOCALE: Final[str] = "ru"
 DEFAULT_DEVICE_LOCALE: Final[str] = "ru"
-DEFAULT_APP_VERSION: Final[str] = "25.12.14"
-DEFAULT_BUILD_NUMBER: Final[int] = 0x97CB
+DEFAULT_APP_VERSION: Final[str] = "26.3.0"
+DEFAULT_BUILD_NUMBER: Final[int] = 6498
 DEFAULT_CLIENT_SESSION_ID: Final[int] = randint(1, 15)
 
 DEFAULT_DEVICE_NAME: Final[str] = choice(WEB_BROWSERS)
