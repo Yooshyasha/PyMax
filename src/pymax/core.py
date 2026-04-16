@@ -24,7 +24,6 @@ from .exceptions import (
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
 from .payloads import UserAgentPayload, generate_user_agent
-from .static.enum import Opcode
 from .static.constant import (
     DEFAULT_PING_INTERVAL,
     HOST,
@@ -35,6 +34,7 @@ from .static.constant import (
     first_names,
     last_names,
 )
+from .static.enum import Opcode
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -252,12 +252,6 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
     async def _keep_online_after_register(
             self, duration: float = REGISTER_ONLINE_DURATION,
     ) -> None:
-        try:
-            await self._sync(self.user_agent)
-        except Exception:
-            self.logger.warning("Post-registration sync failed", exc_info=True)
-            return
-
         self.logger.info(
             "Post-registration online session started (%.0f min)",
             duration / 60,
