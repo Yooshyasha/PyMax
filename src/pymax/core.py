@@ -316,15 +316,6 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
     async def _keep_online_after_register(
             self, duration: float = REGISTER_ONLINE_DURATION,
     ) -> None:
-        if self.me is None:
-            try:
-                await self._sync(self.user_agent)
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                self.logger.warning("Post-registration sync failed", exc_info=True)
-                return
-
         self.logger.info(
             "Post-registration online session started (%.0f min)",
             duration / 60,
