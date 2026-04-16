@@ -511,7 +511,7 @@ class BaseTransport(ClientProtocol):
             chats_count=40,
             user_agent=user_agent,
         ).model_dump(by_alias=True)
-        payload["exp"] = {"chatsCountGroups": 0}
+        payload["chatsCountGroups"] = 0
         try:
             data = await self._send_and_wait(opcode=Opcode.LOGIN, payload=payload)
             raw_payload = data.get("payload", {})
