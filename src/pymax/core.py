@@ -24,7 +24,17 @@ from .exceptions import (
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
 from .payloads import UserAgentPayload, generate_user_agent
-from .static.constant import HOST, PORT, SESSION_STORAGE_DB, WEBSOCKET_URI, first_names, last_names
+from .static.enum import Opcode
+from .static.constant import (
+    DEFAULT_PING_INTERVAL,
+    HOST,
+    PORT,
+    REGISTER_ONLINE_DURATION,
+    SESSION_STORAGE_DB,
+    WEBSOCKET_URI,
+    first_names,
+    last_names,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -239,6 +249,35 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             if asyncio.iscoroutine(result):
                 await self._safe_execute(result, context="on_start handler")
 
+    async def _keep_online_after_register(
+            self, duration: float = REGISTER_ONLINE_DURATION,
+    ) -> None:
+        try:
+            await self._sync(self.user_agent)
+        except Exception:
+            self.logger.warning("Post-registration sync failed", exc_info=True)
+            return
+
+        self.logger.info(
+            "Post-registration online session started (%.0f min)",
+            duration / 60,
+        )
+        deadline = asyncio.get_event_loop().time() + duration
+        while self.is_connected and asyncio.get_event_loop().time() < deadline:
+            try:
+                await self._send_and_wait(
+                    opcode=Opcode.PING,
+                    payload={"interactive": True},
+                    cmd=0,
+                )
+                self.logger.debug("Post-registration ping sent")
+            except Exception:
+                self.logger.warning("Post-registration ping failed, stopping")
+                break
+            await asyncio.sleep(DEFAULT_PING_INTERVAL)
+
+        self.logger.info("Post-registration online session ended")
+
     # noinspection DuplicatedCode
     async def register_with_code(
             self,
@@ -294,6 +333,14 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             raise ValueError("Failed to register, token not received")
 
         self._database.update_auth_token(self._device_id, self._token)
+
+        online_task = asyncio.create_task(
+            self._keep_online_after_register(),
+            name="post-register-online",
+        )
+        online_task.add_done_callback(self._log_task_exception)
+        self._background_tasks.add(online_task)
+        online_task.add_done_callback(self._background_tasks.discard)
 
     async def login_with_code(self, temp_token: str, code: str, start: bool = False) -> None:
         """
