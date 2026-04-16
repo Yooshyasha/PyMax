@@ -135,6 +135,9 @@ Socket connections may be unstable, SSL issues are possible.
     """
             )
         self.logger.info("Connecting to socket %s:%s", self.host, self.port)
+
+        await self._cancel_io_tasks()
+
         raw_sock = await self._create_raw_socket()
         self._socket = self._ssl_context.wrap_socket(raw_sock, server_hostname=self.host, do_handshake_on_connect=False)
         await self._do_ssl_handshake()

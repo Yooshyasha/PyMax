@@ -45,6 +45,8 @@ class WebSocketMixin(BaseTransport):
             self.logger.warning("WebSocket already connected")
             return
 
+        await self._cancel_io_tasks()
+
         self._ws = await websockets.connect(
             self.uri,
             origin=WEBSOCKET_ORIGIN,

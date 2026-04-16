@@ -202,6 +202,15 @@ class BaseTransport(ClientProtocol):
         self.logger.debug("make_message opcode=%s cmd=%s seq=%s", opcode, cmd, self._seq)
         return msg
 
+    async def _cancel_io_tasks(self) -> None:
+        for attr in ("_recv_task", "_outgoing_task"):
+            task: asyncio.Task[Any] | None = getattr(self, attr, None)
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
+            setattr(self, attr, None)
+
     async def _send_interactive_ping(self) -> None:
         while self.is_connected:
             try:
@@ -211,12 +220,17 @@ class BaseTransport(ClientProtocol):
                     cmd=0,
                 )
                 self.logger.debug("Interactive ping sent successfully")
-            except SocketNotConnectedError:
-                self.logger.debug("Socket disconnected, exiting ping loop")
+            except asyncio.CancelledError:
+                raise
+            except (SocketNotConnectedError, WebSocketNotConnectedError):
+                self.logger.debug("Connection lost, exiting ping loop")
                 break
             except Exception:
-                self.logger.warning("Interactive ping failed")
-            await asyncio.sleep(DEFAULT_PING_INTERVAL)
+                self.logger.warning("Interactive ping failed, will retry")
+            try:
+                await asyncio.sleep(DEFAULT_PING_INTERVAL)
+            except asyncio.CancelledError:
+                raise
 
     async def _handshake(self, user_agent: UserAgentPayload) -> dict[str, Any]:
         self.logger.debug(
@@ -435,7 +449,10 @@ class BaseTransport(ClientProtocol):
                         await asyncio.sleep(5)
                         continue
 
-                message = await self._outgoing.get()  # TODO: persistent msg q mb?
+                try:
+                    message = await asyncio.wait_for(self._outgoing.get(), timeout=2.0)
+                except asyncio.TimeoutError:
+                    continue
                 if not message:
                     continue
 

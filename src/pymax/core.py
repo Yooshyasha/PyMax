@@ -18,8 +18,9 @@ from typing_extensions import override
 from .crud import Database
 from .exceptions import (
     InvalidPhoneError,
+    NeedRegistration,
     SocketNotConnectedError,
-    WebSocketNotConnectedError, NeedRegistration,
+    WebSocketNotConnectedError,
 )
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
@@ -252,12 +253,21 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
     async def _keep_online_after_register(
             self, duration: float = REGISTER_ONLINE_DURATION,
     ) -> None:
+        if self.me is None:
+            try:
+                await self._sync(self.user_agent)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                self.logger.warning("Post-registration sync failed", exc_info=True)
+                return
+
         self.logger.info(
             "Post-registration online session started (%.0f min)",
             duration / 60,
         )
-        deadline = asyncio.get_event_loop().time() + duration
-        while self.is_connected and asyncio.get_event_loop().time() < deadline:
+        deadline = time.monotonic() + duration
+        while self.is_connected and time.monotonic() < deadline:
             try:
                 await self._send_and_wait(
                     opcode=Opcode.PING,
@@ -265,10 +275,17 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
                     cmd=0,
                 )
                 self.logger.debug("Post-registration ping sent")
-            except Exception:
-                self.logger.warning("Post-registration ping failed, stopping")
+            except asyncio.CancelledError:
+                raise
+            except (SocketNotConnectedError, WebSocketNotConnectedError):
+                self.logger.debug("Connection lost, ending post-registration online")
                 break
-            await asyncio.sleep(DEFAULT_PING_INTERVAL)
+            except Exception:
+                self.logger.warning("Post-registration ping failed, will retry")
+            try:
+                await asyncio.sleep(DEFAULT_PING_INTERVAL)
+            except asyncio.CancelledError:
+                raise
 
         self.logger.info("Post-registration online session ended")
 
