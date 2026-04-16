@@ -466,6 +466,7 @@ class SocketMaxClient(SocketMixin, MaxClient):
 async def web_max_client_from_socket(
         socket_client: SocketMaxClient,
         *,
+        password: str | None = None,
         web_work_dir: str | None = None,
         **max_client_kwargs: Any,
 ) -> MaxClient:
@@ -523,10 +524,23 @@ async def web_max_client_from_socket(
 
         password_challenge = login_resp.get("passwordChallenge")
         login_attrs = (login_resp.get("tokenAttrs") or {}).get("LOGIN", {})
+
         if password_challenge and not login_attrs:
-            raise ValueError(
-                "Account requires 2FA password; automatic WEB bootstrap from socket is not supported."
-            )
+            if not password:
+                raise ValueError(
+                    "Account requires 2FA password. "
+                    "Pass the 'password' argument to web_max_client_from_socket()."
+                )
+
+            challenge_track_id = password_challenge.get("trackId")
+            if not challenge_track_id:
+                raise ValueError("Password challenge missing trackId")
+
+            token_attrs = await web._check_password(password, challenge_track_id)
+            if not token_attrs:
+                raise ValueError("Incorrect 2FA password")
+
+            login_attrs = token_attrs.get("LOGIN", {})
 
         token = login_attrs.get("token")
         if not token:
