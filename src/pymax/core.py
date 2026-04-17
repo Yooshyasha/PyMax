@@ -356,7 +356,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             if asyncio.iscoroutine(result):
                 await self._safe_execute(result, context="on_start handler")
 
-    async def keep_online(
+    def keep_online(
             self, duration: float = REGISTER_ONLINE_DURATION,
     ) -> None:
         online_task = asyncio.create_task(
