@@ -566,7 +566,7 @@ class BaseTransport(ClientProtocol):
             )
 
         except Exception as e:
-            self.logger.exception(f"Sync failed: {traceback.format_exc()}")
+            self.logger.exception("Sync failed")
             self.is_connected = False
             if self._ws:
                 await self._ws.close()
