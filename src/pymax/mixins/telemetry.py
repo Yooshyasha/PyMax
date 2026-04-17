@@ -2,7 +2,7 @@ import asyncio
 import random
 import time
 
-from pymax.exceptions import Error, SocketNotConnectedError
+from pymax.exceptions import Error, SocketNotConnectedError, WebSocketNotConnectedError
 from pymax.navigation import Navigation
 from pymax.payloads import (
     NavigationEventParams,
@@ -11,6 +11,8 @@ from pymax.payloads import (
 )
 from pymax.protocols import ClientProtocol
 from pymax.static.enum import Opcode
+
+HEARTBEAT_SCREEN: int = 150
 
 
 class TelemetryMixin(ClientProtocol):
@@ -28,6 +30,46 @@ class TelemetryMixin(ClientProtocol):
         except Exception:
             self.logger.warning("Failed to send navigation event", exc_info=True)
             return
+
+    async def _send_heartbeat(self) -> None:
+        if not self.me:
+            return
+        self._action_id += 1
+        payload = {
+            "events": [
+                {
+                    "type": "NAV",
+                    "event": "HEARTBEAT",
+                    "userId": self.me.id,
+                    "time": int(time.time() * 1000),
+                    "params": {
+                        "session_id": self._session_id,
+                        "action_id": self._action_id,
+                        "screen_to": HEARTBEAT_SCREEN,
+                    },
+                },
+            ],
+        }
+        await self._send_and_wait(opcode=Opcode.LOG, payload=payload)
+
+    async def _heartbeat_loop(self) -> None:
+        interval = 10 + (int(time.time() * 1000) % 41)
+        self.logger.debug("Heartbeat loop started (interval=%ds)", interval)
+        try:
+            while self.is_connected:
+                try:
+                    await self._send_heartbeat()
+                    self.logger.debug("Heartbeat sent")
+                except asyncio.CancelledError:
+                    raise
+                except (SocketNotConnectedError, WebSocketNotConnectedError):
+                    self.logger.debug("Connection lost, exiting heartbeat loop")
+                    break
+                except Exception:
+                    self.logger.warning("Failed to send heartbeat, will retry")
+                await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            self.logger.debug("Heartbeat loop cancelled")
 
     async def _send_cold_start(self) -> None:
         if not self.me:
@@ -78,7 +120,6 @@ class TelemetryMixin(ClientProtocol):
         await self._send_navigation_event([payload])
 
     def _get_random_sleep_time(self) -> int:
-        # TODO: вынести в статик
         sleep_options = [
             (1000, 3000),
             (300, 1000),
