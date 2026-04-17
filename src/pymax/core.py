@@ -203,8 +203,11 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             )
 
     def _build_ssl_context(self) -> ssl.SSLContext:
-        if self.user_agent.device_type == "ANDROID":
+        device = self.user_agent.device_type
+        if device == "ANDROID":
             return self._build_android_ssl_context()
+        if device == "IOS":
+            return self._build_ios_ssl_context()
         ctx = ssl.create_default_context()
         ctx.set_ciphers("DEFAULT")
         ctx.check_hostname = True
@@ -268,6 +271,46 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             fallback.append("AES128-SHA")
 
         ctx.set_ciphers(":".join(primary + legacy + fallback))
+        return ctx
+
+    @staticmethod
+    def _build_ios_ssl_context() -> ssl.SSLContext:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.load_default_certs()
+        ctx.options |= ssl.OP_NO_COMPRESSION
+
+        ctx.set_alpn_protocols(["h2", "http/1.1"])
+
+        chacha_top = random.random() < 0.4
+
+        ecdsa_256 = "ECDHE-ECDSA-AES256-GCM-SHA384"
+        ecdsa_128 = "ECDHE-ECDSA-AES128-GCM-SHA256"
+        ecdsa_cc = "ECDHE-ECDSA-CHACHA20-POLY1305"
+        rsa_256 = "ECDHE-RSA-AES256-GCM-SHA384"
+        rsa_128 = "ECDHE-RSA-AES128-GCM-SHA256"
+        rsa_cc = "ECDHE-RSA-CHACHA20-POLY1305"
+
+        if chacha_top:
+            ciphers = [
+                ecdsa_cc, ecdsa_256, ecdsa_128,
+                rsa_cc, rsa_256, rsa_128,
+            ]
+        else:
+            ciphers = [
+                ecdsa_256, ecdsa_cc, ecdsa_128,
+                rsa_256, rsa_cc, rsa_128,
+            ]
+
+        if random.random() < 0.4:
+            fb = ["AES256-GCM-SHA384", "AES128-GCM-SHA256"]
+            if random.random() < 0.3:
+                fb.reverse()
+            ciphers.extend(fb)
+
+        ctx.set_ciphers(":".join(ciphers))
         return ctx
 
     async def _wait_forever(self) -> None:
