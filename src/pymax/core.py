@@ -375,6 +375,14 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             "Post-registration online session started (%.0f min)",
             duration / 60,
         )
+
+        await self._sync(self.user_agent)
+
+        if self._send_fake_telemetry:
+            telemetry_task = asyncio.create_task(self._start())
+            telemetry_task.add_done_callback(self._log_task_exception)
+            self._background_tasks.add(telemetry_task)
+
         deadline = time.monotonic() + duration
         while self.is_connected and time.monotonic() < deadline:
             try:
