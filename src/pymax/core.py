@@ -380,7 +380,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             duration / 60,
         )
 
-        await self._sync(self.user_agent)
+        if self.me is None:
+            await self._sync(self.user_agent)
 
         hb_task = asyncio.create_task(self._heartbeat_loop())
         hb_task.add_done_callback(self._log_task_exception)
