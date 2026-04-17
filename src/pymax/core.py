@@ -360,7 +360,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             self, duration: float = REGISTER_ONLINE_DURATION,
     ) -> None:
         online_task = asyncio.create_task(
-            self._keep_online_after_register(),
+            self._keep_online(duration),
             name="online",
         )
         online_task.add_done_callback(self._log_task_exception)
