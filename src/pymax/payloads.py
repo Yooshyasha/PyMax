@@ -24,6 +24,8 @@ from pymax.static.constant import (
     DEFAULT_USER_AGENT,
     DESKTOP_OS_POOL,
     DESKTOP_SCREENS,
+    IOS_DEVICES,
+    IOS_VERSIONS,
     TIMEZONES,
     WEB_BROWSERS,
 )
@@ -80,6 +82,30 @@ def _generate_android_ua() -> UserAgentPayload:
     return UserAgentPayload(
         device_type="ANDROID",
         os_version=f"Android {android_ver}",
+        device_name=device["name"],
+        header_user_agent=header_ua,
+        screen=device["screen"],
+        app_version=DEFAULT_APP_VERSION,
+        build_number=DEFAULT_BUILD_NUMBER,
+        timezone=random.choice(TIMEZONES),
+        client_session_id=random.randint(1, 15),
+    )
+
+
+def _generate_ios_ua() -> UserAgentPayload:
+    device = random.choice(IOS_DEVICES)
+    version = random.choice(IOS_VERSIONS)
+
+    os_ver_underscored = version["os"].replace(".", "_")
+    header_ua = (
+        f"Mozilla/5.0 (iPhone; CPU iPhone OS {os_ver_underscored} like Mac OS X) "
+        f"AppleWebKit/605.1.15 (KHTML, like Gecko) "
+        f"Version/{version['safari']} Mobile/15E148 Safari/604.1"
+    )
+
+    return UserAgentPayload(
+        device_type="IOS",
+        os_version=f"iOS {version['os']}",
         device_name=device["name"],
         header_user_agent=header_ua,
         screen=device["screen"],
@@ -155,13 +181,14 @@ def _generate_web_ua() -> UserAgentPayload:
 
 _GENERATORS: dict[str, callable] = {
     "ANDROID": _generate_android_ua,
+    "IOS": _generate_ios_ua,
     "DESKTOP": _generate_desktop_ua,
     "WEB": _generate_web_ua,
 }
 
 
 def generate_user_agent(
-    device_type: Literal["WEB", "DESKTOP", "ANDROID"] = "WEB",
+    device_type: Literal["WEB", "DESKTOP", "ANDROID", "IOS"] = "WEB",
 ) -> UserAgentPayload:
     """Generate a realistic :class:`UserAgentPayload` for the given *device_type*.
 

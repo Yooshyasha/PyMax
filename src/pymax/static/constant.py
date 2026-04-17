@@ -51,6 +51,48 @@ CHROME_MOBILE_VERSIONS: Final[list[str]] = [
     "129.0.6668.70", "130.0.6723.58",
 ]
 
+IOS_DEVICES: Final[list[dict[str, str]]] = [
+    {"name": "iPhone 16 Pro Max", "screen": "1320x2868 3.0x"},
+    {"name": "iPhone 16 Pro", "screen": "1206x2622 3.0x"},
+    {"name": "iPhone 16", "screen": "1179x2556 3.0x"},
+    {"name": "iPhone 15 Pro Max", "screen": "1290x2796 3.0x"},
+    {"name": "iPhone 15 Pro", "screen": "1179x2556 3.0x"},
+    {"name": "iPhone 15", "screen": "1179x2556 3.0x"},
+    {"name": "iPhone 14 Pro Max", "screen": "1290x2796 3.0x"},
+    {"name": "iPhone 14 Pro", "screen": "1179x2556 3.0x"},
+    {"name": "iPhone 14", "screen": "1170x2532 3.0x"},
+    {"name": "iPhone 13 Pro Max", "screen": "1284x2778 3.0x"},
+    {"name": "iPhone 13 Pro", "screen": "1170x2532 3.0x"},
+    {"name": "iPhone 13", "screen": "1170x2532 3.0x"},
+    {"name": "iPhone 12 Pro Max", "screen": "1284x2778 3.0x"},
+    {"name": "iPhone 12 Pro", "screen": "1170x2532 3.0x"},
+    {"name": "iPhone 12", "screen": "1170x2532 3.0x"},
+    {"name": "iPhone SE (3rd generation)", "screen": "750x1334 2.0x"},
+    {"name": "iPhone 11 Pro Max", "screen": "1242x2688 3.0x"},
+    {"name": "iPhone 11 Pro", "screen": "1125x2436 3.0x"},
+    {"name": "iPhone 11", "screen": "828x1792 2.0x"},
+]
+
+IOS_VERSIONS: Final[list[dict[str, str]]] = [
+    {"os": "18.4", "safari": "18.4"},
+    {"os": "18.3.2", "safari": "18.3"},
+    {"os": "18.3", "safari": "18.3"},
+    {"os": "18.2", "safari": "18.2"},
+    {"os": "18.1.1", "safari": "18.1"},
+    {"os": "18.0", "safari": "18.0"},
+    {"os": "17.7.6", "safari": "17.7"},
+    {"os": "17.7.5", "safari": "17.7"},
+    {"os": "17.6.1", "safari": "17.6"},
+    {"os": "17.5.1", "safari": "17.5"},
+    {"os": "17.5", "safari": "17.5"},
+    {"os": "17.4.1", "safari": "17.4"},
+    {"os": "17.4", "safari": "17.4"},
+    {"os": "17.3.1", "safari": "17.3"},
+    {"os": "16.7.11", "safari": "16.7"},
+    {"os": "16.7.8", "safari": "16.7"},
+    {"os": "16.6", "safari": "16.6"},
+]
+
 DESKTOP_OS_POOL: Final[list[dict[str, str]]] = [
     {"os_version": "Windows 10", "device_name": "Windows"},
     {"os_version": "Windows 11", "device_name": "Windows"},
