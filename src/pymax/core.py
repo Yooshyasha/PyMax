@@ -11,7 +11,7 @@ import time
 from collections.abc import Awaitable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from typing_extensions import override
 
@@ -152,6 +152,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         self._last_error_time: float = 0.0
 
         self._device_id = device_id if device_id is not None else self._database.get_device_id()
+        self._mt_instanceid: str = str(uuid5(self._device_id, "mt_instanceid"))
         self._file_upload_waiters: dict[int, asyncio.Future[dict[str, Any]]] = {}
 
         self._token = self._database.get_auth_token() or token

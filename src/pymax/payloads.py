@@ -59,12 +59,14 @@ class UserAgentPayload(CamelModel):
     device_locale: str = Field(default=DEFAULT_DEVICE_LOCALE)
     os_version: str = Field(default=DEFAULT_OS_VERSION)
     device_name: str = Field(default=DEFAULT_DEVICE_NAME)
-    header_user_agent: str = Field(default=DEFAULT_USER_AGENT)
+    header_user_agent: str = Field(default=DEFAULT_USER_AGENT, exclude=True)
     app_version: str = Field(default=DEFAULT_APP_VERSION)
     screen: str = Field(default=DEFAULT_SCREEN)
     timezone: str = Field(default=DEFAULT_TIMEZONE)
     client_session_id: int = Field(default=DEFAULT_CLIENT_SESSION_ID)
     build_number: int = Field(default=DEFAULT_BUILD_NUMBER)
+    push_device_type: str | None = Field(default=None)
+    arch: str | None = Field(default=None)
 
 
 def _generate_android_ua() -> UserAgentPayload:
@@ -89,6 +91,8 @@ def _generate_android_ua() -> UserAgentPayload:
         build_number=DEFAULT_BUILD_NUMBER,
         timezone=random.choice(TIMEZONES),
         client_session_id=random.randint(1, 15),
+        push_device_type="GCM",
+        arch="arm64-v8a",
     )
 
 
@@ -113,6 +117,8 @@ def _generate_ios_ua() -> UserAgentPayload:
         build_number=DEFAULT_BUILD_NUMBER,
         timezone=random.choice(TIMEZONES),
         client_session_id=random.randint(1, 15),
+        push_device_type="APNS",
+        arch="arm64",
     )
 
 

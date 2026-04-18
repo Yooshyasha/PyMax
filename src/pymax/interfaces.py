@@ -233,15 +233,21 @@ class BaseTransport(ClientProtocol):
                 raise
 
     async def _handshake(self, user_agent: UserAgentPayload) -> dict[str, Any]:
+        user_agent_json = user_agent.model_dump(by_alias=True, exclude_none=True)
+
         self.logger.debug(
             "Sending handshake with user_agent keys=%s",
-            user_agent.model_dump(by_alias=True).keys(),
+            user_agent_json.keys(),
         )
 
-        user_agent_json = user_agent.model_dump(by_alias=True)
         resp = await self._send_and_wait(
             opcode=Opcode.SESSION_INIT,
-            payload={"deviceId": str(self._device_id), "userAgent": user_agent_json},
+            payload={
+                "mt_instanceid": str(self._mt_instanceid),
+                "clientSessionId": user_agent.client_session_id,
+                "deviceId": str(self._device_id),
+                "userAgent": user_agent_json,
+            },
         )
 
         if resp.get("payload", {}).get("error"):
@@ -527,7 +533,7 @@ class BaseTransport(ClientProtocol):
             drafts_sync=0,
             chats_count=40,
             user_agent=user_agent,
-        ).model_dump(by_alias=True)
+        ).model_dump(by_alias=True, exclude_none=True)
         payload["chatsCountGroups"] = 0
         try:
             data = await self._send_and_wait(opcode=Opcode.LOGIN, payload=payload)

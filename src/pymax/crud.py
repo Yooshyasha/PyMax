@@ -41,6 +41,7 @@ class Database:
                 return auth.device_id
             return device_id
 
+
     def insert_auth(self, auth: Auth) -> Auth:
         with self.get_session() as session:
             session.add(auth)
