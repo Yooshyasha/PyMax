@@ -338,6 +338,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         if sync:
             await self._sync()
 
+        await self.token_refresh()
+
         self.logger.debug("is_connected=%s before starting ping", self.is_connected)
         ping_task = asyncio.create_task(self._send_interactive_ping())
         ping_task.add_done_callback(self._log_task_exception)
@@ -346,6 +348,10 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         heartbeat_task.add_done_callback(self._log_task_exception)
         self._background_tasks.add(heartbeat_task)
+
+        refresh_task = asyncio.create_task(self._token_refresh_loop())
+        refresh_task.add_done_callback(self._log_task_exception)
+        self._background_tasks.add(refresh_task)
 
         start_scheduled_task = asyncio.create_task(self._start_scheduled_tasks())
         start_scheduled_task.add_done_callback(self._log_task_exception)
@@ -384,9 +390,15 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         if self.me is None:
             await self._sync(self.user_agent)
 
+        await self.token_refresh()
+
         hb_task = asyncio.create_task(self._heartbeat_loop())
         hb_task.add_done_callback(self._log_task_exception)
         self._background_tasks.add(hb_task)
+
+        refresh_task = asyncio.create_task(self._token_refresh_loop())
+        refresh_task.add_done_callback(self._log_task_exception)
+        self._background_tasks.add(refresh_task)
 
         if self._send_fake_telemetry:
             telemetry_task = asyncio.create_task(self._start())

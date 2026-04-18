@@ -59,7 +59,7 @@ class UserAgentPayload(CamelModel):
     device_locale: str = Field(default=DEFAULT_DEVICE_LOCALE)
     os_version: str = Field(default=DEFAULT_OS_VERSION)
     device_name: str = Field(default=DEFAULT_DEVICE_NAME)
-    header_user_agent: str = Field(default=DEFAULT_USER_AGENT, exclude=True)
+    header_user_agent: str = Field(default=DEFAULT_USER_AGENT)
     app_version: str = Field(default=DEFAULT_APP_VERSION)
     screen: str = Field(default=DEFAULT_SCREEN)
     timezone: str = Field(default=DEFAULT_TIMEZONE)

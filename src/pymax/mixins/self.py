@@ -1,3 +1,4 @@
+import asyncio
 import urllib.parse
 from http import HTTPStatus
 from typing import Any
@@ -6,7 +7,7 @@ from uuid import uuid4
 
 import aiohttp
 
-from pymax.exceptions import Error
+from pymax.exceptions import Error, SocketNotConnectedError, WebSocketNotConnectedError
 from pymax.files import Photo
 from pymax.payloads import (
     ChangeProfilePayload,
@@ -21,8 +22,37 @@ from pymax.static.enum import Opcode
 from pymax.types import Folder, FolderList, FolderUpdate, Me
 from pymax.utils import MixinsUtils
 
+TOKEN_REFRESH_INTERVAL: float = 600.0
+
 
 class SelfMixin(ClientProtocol):
+    async def token_refresh(self) -> dict[str, Any] | None:
+        try:
+            data = await self._send_and_wait(
+                opcode=Opcode.TOKEN_REFRESH, payload={},
+            )
+            payload = data.get("payload", {})
+            self.logger.info(f"Payload: {payload}")
+            new_token = payload.get("token")
+            if new_token:
+                self._token = new_token
+                self._database.update_auth_token(self._device_id, new_token)
+                self.logger.debug("Token refreshed successfully")
+            return payload
+        except (SocketNotConnectedError, WebSocketNotConnectedError):
+            self.logger.debug("Connection lost during token refresh")
+            return None
+        except Exception:
+            self.logger.warning("Token refresh failed", exc_info=True)
+            return None
+
+    async def _token_refresh_loop(self) -> None:
+        try:
+            while self.is_connected:
+                await asyncio.sleep(TOKEN_REFRESH_INTERVAL)
+                await self.token_refresh()
+        except asyncio.CancelledError:
+            self.logger.debug("Token refresh loop cancelled")
     async def _request_photo_upload_url(self) -> str:
         self.logger.info("Requesting profile photo upload URL")
 
