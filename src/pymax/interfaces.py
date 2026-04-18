@@ -647,10 +647,21 @@ class BaseTransport(ClientProtocol):
         except Exception:
             self.logger.warning("CONFIG failed", exc_info=True)
 
+    async def _fetch_folders(self) -> None:
+        try:
+            await self._send_and_wait(
+                opcode=Opcode.FOLDERS_GET,
+                payload={"folderSync": 0},
+            )
+            self.logger.debug("FOLDERS_GET sent")
+        except Exception:
+            self.logger.warning("FOLDERS_GET failed", exc_info=True)
+
     async def _post_login_sync(self, chat_marker: int) -> None:
         await self._fetch_remaining_chats(chat_marker)
         await self._send_assets_update(sync_type=2)
         await self._send_assets_update(sync_type=4)
+        await self._fetch_folders()
         await self._send_config()
 
     async def _get_chat(self, chat_id: int) -> Chat | None:
