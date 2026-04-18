@@ -28,16 +28,13 @@ TOKEN_REFRESH_INTERVAL: float = 600.0
 class SelfMixin(ClientProtocol):
     async def token_refresh(self) -> dict[str, Any] | None:
         try:
+            user_id = self.me.id if self.me else 0
             data = await self._send_and_wait(
-                opcode=Opcode.TOKEN_REFRESH, payload={},
+                opcode=Opcode.TOKEN_REFRESH,
+                payload={"value": self._token or "", "userId": user_id},
             )
             payload = data.get("payload", {})
-            self.logger.info(f"Payload: {payload}")
-            new_token = payload.get("token")
-            if new_token:
-                self._token = new_token
-                self._database.update_auth_token(self._device_id, new_token)
-                self.logger.debug("Token refreshed successfully")
+            self.logger.debug("Token refresh response received")
             return payload
         except (SocketNotConnectedError, WebSocketNotConnectedError):
             self.logger.debug("Connection lost during token refresh")

@@ -313,13 +313,8 @@ Socket connections may be unstable, SSL issues are possible.
             return data
 
         except (ssl.SSLEOFError, ssl.SSLError, ConnectionError) as conn_err:
-            self.logger.warning("Connection lost, reconnecting...")
+            self.logger.warning("Connection lost during send (opcode=%s)", opcode)
             self.is_connected = False
-            try:
-                await self.connect(self.user_agent)
-            except Exception as exc:
-                self.logger.exception("Reconnect failed")
-                raise exc from conn_err
             raise SocketNotConnectedError from conn_err
         except asyncio.TimeoutError:
             self.logger.exception("Send and wait failed (opcode=%s, seq=%s)", opcode, msg["seq"])

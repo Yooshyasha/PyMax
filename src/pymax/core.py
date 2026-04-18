@@ -164,6 +164,15 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         self._session_id: int = int(time.time() * 1000)
         self._action_id: int = 1
         self._current_screen: str = "chats_list_tab"
+        self._chats_sync: int = 0
+        self._contacts_sync: int = 0
+        self._presence_sync: int = 0
+        self._calls_sync: int = 0
+        self._last_login: int = 0
+        self._drafts_sync: int = 0
+        self._banners_sync: int = 0
+        self._config_hash: str | None = None
+        self._server_time_delta: int = 0
 
         self._on_message_handlers: list[
             tuple[Callable[[Message], Any], BaseFilter[Message] | None]
@@ -334,10 +343,15 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         except Exception:
             self.logger.exception("Error closing client")
 
-    async def _post_login_tasks(self, sync: bool = True) -> None:
-        if sync:
-            await self._sync()
+    async def initialize(self) -> None:
+        chat_marker = await self._sync() or 0
+        await self._post_login_tasks(sync=False, chat_marker=chat_marker)
 
+    async def _post_login_tasks(self, sync: bool = True, chat_marker: int = 0) -> None:
+        if sync:
+            chat_marker = await self._sync() or 0
+
+        await self._post_login_sync(chat_marker)
         await self.token_refresh()
 
         self.logger.debug("is_connected=%s before starting ping", self.is_connected)
@@ -388,7 +402,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         )
 
         if self.me is None:
-            await self._sync(self.user_agent)
+            chat_marker = await self._sync(self.user_agent) or 0
+            await self._post_login_sync(chat_marker)
 
         await self.token_refresh()
 
@@ -448,11 +463,12 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         await self.continue_register(token, first_name, last_name)
 
         if start:
-            # чувак, если ты будешь это читать, то нельзя делать одну функцию и логином и рантаймом;
-            # честно, воняет, но я все понимаю и не виню
+            first_iteration = True
             while True:
-                # noinspection PyBroadException
                 try:
+                    if not first_iteration:
+                        await self.connect(self.user_agent)
+                    first_iteration = False
                     await self._post_login_tasks()
                     await self._wait_forever()
                 except Exception:
@@ -463,7 +479,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
                 self.logger.info("Reconnecting after post-login tasks failure")
                 await asyncio.sleep(self.reconnect_delay)
         else:
-            self.logger.info("Login successful, token saved to database, exiting...")
+            self.logger.info("Registration successful, token saved to database, exiting...")
 
     async def continue_register(
             self,
@@ -520,8 +536,12 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         self._token = token
         self._database.update_auth_token(self._device_id, token)
         if start:
+            first_iteration = True
             while True:
                 try:
+                    if not first_iteration:
+                        await self.connect(self.user_agent)
+                    first_iteration = False
                     await self._post_login_tasks()
                     await self._wait_forever()
                 except Exception:
@@ -559,8 +579,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
                 if self._token is None:
                     await self._login()
 
-                await self._sync(self.user_agent)
-                await self._post_login_tasks(sync=False)
+                chat_marker = await self._sync(self.user_agent) or 0
+                await self._post_login_tasks(sync=False, chat_marker=chat_marker)
 
                 wait_task = asyncio.create_task(self._wait_forever())
                 stop_task = asyncio.create_task(self._stop_event.wait())

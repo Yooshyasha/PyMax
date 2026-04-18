@@ -239,29 +239,43 @@ class SendCodePayload(CamelModel):
     auth_token_type: AuthType = AuthType.CHECK_CODE
 
 
-class SyncPayload(CamelModel):
-    interactive: bool = True
+class LoginPayload(CamelModel):
     token: str
+    interactive: bool = True
     chats_sync: int = 0
     contacts_sync: int = 0
     presence_sync: int = 0
+    calls_sync: int = 0
+    last_login: int = 0
     drafts_sync: int = 0
-    chats_count: int = 40
-    user_agent: UserAgentPayload = Field(
-        default_factory=lambda: UserAgentPayload(
-            device_type=DEFAULT_DEVICE_TYPE,
-            locale=DEFAULT_LOCALE,
-            device_locale=DEFAULT_DEVICE_LOCALE,
-            os_version=DEFAULT_OS_VERSION,
-            device_name=DEFAULT_DEVICE_NAME,
-            header_user_agent=DEFAULT_USER_AGENT,
-            app_version=DEFAULT_APP_VERSION,
-            screen=DEFAULT_SCREEN,
-            timezone=DEFAULT_TIMEZONE,
-            client_session_id=DEFAULT_CLIENT_SESSION_ID,
-            build_number=DEFAULT_BUILD_NUMBER,
-        ),
-    )
+    banners_sync: int = 0
+    config_hash: str | None = None
+
+    def to_payload(self) -> dict[str, Any]:
+        d: dict[str, Any] = {
+            "token": self.token,
+            "interactive": self.interactive,
+            "presenceSync": self.presence_sync,
+        }
+        if self.chats_sync > 0:
+            d["chatsSync"] = self.chats_sync
+        if self.contacts_sync > 0:
+            d["contactsSync"] = self.contacts_sync
+        if self.calls_sync > 0:
+            d["callsSync"] = self.calls_sync
+        if self.last_login > 0:
+            d["lastLogin"] = self.last_login
+        if self.drafts_sync > 0:
+            d["draftsSync"] = self.drafts_sync
+        if self.banners_sync > 0:
+            d["bannersSync"] = self.banners_sync
+        if self.config_hash:
+            d["configHash"] = self.config_hash
+        d["exp"] = {}
+        return d
+
+
+SyncPayload = LoginPayload
 
 
 class ReplyLink(CamelModel):

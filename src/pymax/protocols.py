@@ -73,6 +73,15 @@ class ClientProtocol(ABC):
         self._session_id: int
         self._action_id: int = 0
         self._current_screen: str = "chats_list_tab"
+        self._chats_sync: int = 0
+        self._contacts_sync: int = 0
+        self._presence_sync: int = 0
+        self._calls_sync: int = 0
+        self._last_login: int = 0
+        self._drafts_sync: int = 0
+        self._banners_sync: int = 0
+        self._config_hash: str | None = None
+        self._server_time_delta: int = 0
         self._on_message_handlers: list[
             tuple[Callable[[Message], Any], BaseFilter[Message] | None]
         ] = []

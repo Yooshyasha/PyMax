@@ -14,7 +14,7 @@ from typing_extensions import Self
 from pymax.exceptions import SocketNotConnectedError, WebSocketNotConnectedError
 from pymax.filters import BaseFilter
 from pymax.formatter import ColoredFormatter
-from pymax.payloads import BaseWebSocketMessage, SyncPayload, UserAgentPayload
+from pymax.payloads import BaseWebSocketMessage, LoginPayload, UserAgentPayload
 from pymax.protocols import ClientProtocol
 from pymax.static.constant import DEFAULT_PING_INTERVAL, DEFAULT_TIMEOUT
 from pymax.static.enum import Opcode
@@ -149,7 +149,11 @@ class BaseClient(ClientProtocol):
         pass
 
     @abstractmethod
-    async def _post_login_tasks(self, sync: bool = True) -> None:
+    async def initialize(self) -> None:
+        pass
+
+    @abstractmethod
+    async def _post_login_tasks(self, sync: bool = True, chat_marker: int = 0) -> None:
         pass
 
     @abstractmethod
@@ -518,29 +522,41 @@ class BaseTransport(ClientProtocol):
         else:
             return float(2 ** retry_count)
 
-    async def _sync(self, user_agent: UserAgentPayload | None = None) -> None:
-        self.logger.info("Starting initial sync")
+    async def _sync(self, user_agent: UserAgentPayload | None = None) -> int:
+        self.logger.info("Starting initial sync (LOGIN)")
 
-        if user_agent is None:
-            user_agent = self.headers or UserAgentPayload()
-
-        payload = SyncPayload(
-            interactive=True,
+        login = LoginPayload(
             token=self._token,
-            chats_sync=0,
-            contacts_sync=0,
-            presence_sync=0,
-            drafts_sync=0,
-            chats_count=40,
-            user_agent=user_agent,
-        ).model_dump(by_alias=True, exclude_none=True)
-        payload["chatsCountGroups"] = 0
+            interactive=True,
+            chats_sync=self._chats_sync,
+            contacts_sync=self._contacts_sync,
+            presence_sync=self._presence_sync,
+            calls_sync=self._calls_sync,
+            last_login=self._last_login,
+            drafts_sync=self._drafts_sync,
+            banners_sync=self._banners_sync,
+            config_hash=self._config_hash,
+        )
+        payload = login.to_payload()
+
         try:
             data = await self._send_and_wait(opcode=Opcode.LOGIN, payload=payload)
             raw_payload = data.get("payload", {})
 
-            if error := raw_payload.get("error"):
+            if raw_payload.get("error"):
                 MixinsUtils.handle_error(data)
+
+            new_token = raw_payload.get("token")
+            if new_token:
+                self._token = new_token
+                self._database.update_auth_token(self._device_id, new_token)
+                self.logger.info("Token updated from LOGIN response")
+
+            server_time = raw_payload.get("time")
+            if server_time:
+                self._server_time_delta = server_time - int(time.time() * 1000)
+
+            self._last_login = int(time.time() * 1000)
 
             for raw_chat in raw_payload.get("chats", []):
                 try:
@@ -564,6 +580,8 @@ class BaseTransport(ClientProtocol):
             if raw_payload.get("profile", {}).get("contact"):
                 self.me = Me.from_dict(raw_payload.get("profile", {}).get("contact", {}))
 
+            chat_marker = raw_payload.get("chatMarker", 0)
+
             self.logger.info(
                 "Sync completed: dialogs=%d chats=%d channels=%d",
                 len(self.dialogs),
@@ -571,13 +589,69 @@ class BaseTransport(ClientProtocol):
                 len(self.channels),
             )
 
-        except Exception as e:
+            return chat_marker
+
+        except Exception:
             self.logger.exception("Sync failed")
             self.is_connected = False
             if self._ws:
                 await self._ws.close()
             self._ws = None
             raise
+
+    async def _fetch_remaining_chats(self, marker: int) -> None:
+        if not marker or marker <= 0:
+            return
+        while marker > 0:
+            try:
+                data = await self._send_and_wait(
+                    opcode=Opcode.CHATS_LIST,
+                    payload={"marker": marker},
+                )
+                raw = data.get("payload", {})
+                if raw.get("error"):
+                    self.logger.warning("CHATS_LIST error, stopping pagination")
+                    break
+                for raw_chat in raw.get("chats", []):
+                    try:
+                        if raw_chat.get("type") == ChatType.DIALOG.value:
+                            self.dialogs.append(Dialog.from_dict(raw_chat))
+                        elif raw_chat.get("type") == ChatType.CHAT.value:
+                            self.chats.append(Chat.from_dict(raw_chat))
+                        elif raw_chat.get("type") == ChatType.CHANNEL.value:
+                            self.channels.append(Channel.from_dict(raw_chat))
+                    except Exception:
+                        self.logger.exception("Error parsing chat in CHATS_LIST page")
+                marker = raw.get("marker", 0)
+            except Exception:
+                self.logger.warning("CHATS_LIST pagination failed", exc_info=True)
+                break
+
+    async def _send_assets_update(self, sync_type: int = 2, sync_value: int = 0) -> None:
+        try:
+            await self._send_and_wait(
+                opcode=Opcode.ASSETS_UPDATE,
+                payload={"type": sync_type, "sync": sync_value},
+            )
+            self.logger.debug("ASSETS_UPDATE type=%d sent", sync_type)
+        except Exception:
+            self.logger.warning("ASSETS_UPDATE failed", exc_info=True)
+
+    async def _send_config(self) -> None:
+        try:
+            await self._send_and_wait(
+                opcode=Opcode.CONFIG,
+                payload={},
+            )
+            self.logger.debug("CONFIG sent")
+        except Exception:
+            self.logger.warning("CONFIG failed", exc_info=True)
+
+    async def _post_login_sync(self, chat_marker: int) -> None:
+        await self._fetch_remaining_chats(chat_marker)
+        await self._send_assets_update(sync_type=2)
+        await self._send_assets_update(sync_type=4)
+        await self._send_config()
 
     async def _get_chat(self, chat_id: int) -> Chat | None:
         for chat in self.chats:
