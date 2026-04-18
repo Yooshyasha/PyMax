@@ -69,7 +69,10 @@ class UserAgentPayload(CamelModel):
     arch: str | None = Field(default=None)
 
 
-def _generate_android_ua() -> UserAgentPayload:
+def _generate_android_ua(
+    app_version: str = DEFAULT_APP_VERSION,
+    build_number: int = DEFAULT_BUILD_NUMBER,
+) -> UserAgentPayload:
     device = random.choice(ANDROID_DEVICES)
     android_ver = random.choice(ANDROID_OS_VERSIONS)
     chrome_ver = random.choice(CHROME_MOBILE_VERSIONS)
@@ -87,8 +90,8 @@ def _generate_android_ua() -> UserAgentPayload:
         device_name=device["name"],
         header_user_agent=header_ua,
         screen=device["screen"],
-        app_version=DEFAULT_APP_VERSION,
-        build_number=DEFAULT_BUILD_NUMBER,
+        app_version=app_version,
+        build_number=build_number,
         timezone=random.choice(TIMEZONES),
         client_session_id=random.randint(1, 15),
         push_device_type="GCM",
@@ -96,7 +99,10 @@ def _generate_android_ua() -> UserAgentPayload:
     )
 
 
-def _generate_ios_ua() -> UserAgentPayload:
+def _generate_ios_ua(
+    app_version: str = DEFAULT_APP_VERSION,
+    build_number: int = DEFAULT_BUILD_NUMBER,
+) -> UserAgentPayload:
     device = random.choice(IOS_DEVICES)
     version = random.choice(IOS_VERSIONS)
 
@@ -113,8 +119,8 @@ def _generate_ios_ua() -> UserAgentPayload:
         device_name=device["name"],
         header_user_agent=header_ua,
         screen=device["screen"],
-        app_version=DEFAULT_APP_VERSION,
-        build_number=DEFAULT_BUILD_NUMBER,
+        app_version=app_version,
+        build_number=build_number,
         timezone=random.choice(TIMEZONES),
         client_session_id=random.randint(1, 15),
         push_device_type="APNS",
@@ -122,7 +128,10 @@ def _generate_ios_ua() -> UserAgentPayload:
     )
 
 
-def _generate_desktop_ua() -> UserAgentPayload:
+def _generate_desktop_ua(
+    app_version: str = DEFAULT_APP_VERSION,
+    build_number: int = DEFAULT_BUILD_NUMBER,
+) -> UserAgentPayload:
     os_info = random.choice(DESKTOP_OS_POOL)
 
     ua_platform_map = {
@@ -139,14 +148,17 @@ def _generate_desktop_ua() -> UserAgentPayload:
         device_name=os_info["device_name"],
         header_user_agent=ua.text,
         screen=random.choice(DESKTOP_SCREENS),
-        app_version=DEFAULT_APP_VERSION,
-        build_number=DEFAULT_BUILD_NUMBER,
+        app_version=app_version,
+        build_number=build_number,
         timezone=random.choice(TIMEZONES),
         client_session_id=random.randint(1, 15),
     )
 
 
-def _generate_web_ua() -> UserAgentPayload:
+def _generate_web_ua(
+    app_version: str = DEFAULT_APP_VERSION,
+    build_number: int = DEFAULT_BUILD_NUMBER,
+) -> UserAgentPayload:
     browser_name = random.choice(WEB_BROWSERS)
 
     browser_map = {
@@ -178,8 +190,8 @@ def _generate_web_ua() -> UserAgentPayload:
         device_name=browser_name,
         header_user_agent=ua.text,
         screen=random.choice(DESKTOP_SCREENS),
-        app_version=DEFAULT_APP_VERSION,
-        build_number=DEFAULT_BUILD_NUMBER,
+        app_version=app_version,
+        build_number=build_number,
         timezone=random.choice(TIMEZONES),
         client_session_id=random.randint(1, 15),
     )
@@ -195,10 +207,16 @@ _GENERATORS: dict[str, callable] = {
 
 def generate_user_agent(
     device_type: Literal["WEB", "DESKTOP", "ANDROID", "IOS"] = "WEB",
+    app_version: str = DEFAULT_APP_VERSION,
+    build_number: int = DEFAULT_BUILD_NUMBER,
 ) -> UserAgentPayload:
     """Generate a realistic :class:`UserAgentPayload` for the given *device_type*.
 
-    Supported device types: ``"WEB"``, ``"DESKTOP"``, ``"ANDROID"``.
+    Supported device types: ``"WEB"``, ``"DESKTOP"``, ``"ANDROID"``, ``"IOS"``.
+
+    :param device_type: Тип устройства.
+    :param app_version: Версия приложения (например ``"26.3.0"``).
+    :param build_number: Номер сборки (например ``6498``).
     """
     gen = _GENERATORS.get(device_type)
     if gen is None:
@@ -206,7 +224,7 @@ def generate_user_agent(
             f"Unknown device_type={device_type!r}. "
             f"Expected one of {set(_GENERATORS)}"
         )
-    return gen()
+    return gen(app_version=app_version, build_number=build_number)
 
 
 class RequestCodePayload(CamelModel):
