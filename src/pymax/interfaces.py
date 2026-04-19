@@ -658,11 +658,12 @@ class BaseTransport(ClientProtocol):
             self.logger.warning("FOLDERS_GET failed", exc_info=True)
 
     async def _post_login_sync(self, chat_marker: int) -> None:
-        await self._fetch_remaining_chats(chat_marker)
-        await self._send_assets_update(sync_type=2)
-        await self._send_assets_update(sync_type=4)
-        await self._fetch_folders()
-        await self._send_config()
+        if not self.user_agent.device_type == "WEB":
+            await self._fetch_remaining_chats(chat_marker)
+            await self._send_assets_update(sync_type=2)
+            await self._send_assets_update(sync_type=4)
+            await self._fetch_folders()
+            await self._send_config()
 
     async def _get_chat(self, chat_id: int) -> Chat | None:
         for chat in self.chats:
