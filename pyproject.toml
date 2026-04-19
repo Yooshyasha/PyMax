@@ -13,7 +13,7 @@ classifiers = [
 ]
 dependencies = [
   "sqlmodel>=0.0.24",
-  "curl_cffi=0.14.0",
+  "curl_cffi==0.14.0",
   "msgpack>=1.1.1",
   "lz4>=4.4.4",
   "aiofiles>=24.1.0",
