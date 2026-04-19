@@ -344,12 +344,12 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
             self.logger.exception("Error closing client")
 
     async def initialize(self) -> None:
-        chat_marker = await self._sync() or 0
+        chat_marker = await self._sync(self.user_agent) or 0
         await self._post_login_tasks(sync=False, chat_marker=chat_marker)
 
     async def _post_login_tasks(self, sync: bool = True, chat_marker: int = 0) -> None:
         if sync:
-            chat_marker = await self._sync() or 0
+            chat_marker = await self._sync(self.user_agent) or 0
 
         await self._post_login_sync(chat_marker)
         await self.token_refresh()

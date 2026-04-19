@@ -521,7 +521,7 @@ class BaseTransport(ClientProtocol):
         else:
             return float(2 ** retry_count)
 
-    async def _sync(self, user_agent: UserAgentPayload | None = None) -> int:
+    async def _sync(self, user_agent: UserAgentPayload) -> int:
         self.logger.info("Starting initial sync (LOGIN)")
 
         login = LoginPayload(
