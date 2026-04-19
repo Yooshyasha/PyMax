@@ -1,5 +1,6 @@
 import asyncio
 import json
+import traceback
 from typing import Any
 
 from curl_cffi.requests import AsyncSession
@@ -109,16 +110,16 @@ class WebSocketMixin(BaseTransport):
 
                 break
             except Exception:
-                self.logger.exception("Error in recv_loop; backing off briefly")
+                self.logger.exception(f"Error in recv_loop; backing off briefly:\n{traceback.format_exc()}")
                 await asyncio.sleep(RECV_LOOP_BACKOFF_DELAY)
 
     @override
     async def _send_and_wait(
-        self,
-        opcode: Opcode,
-        payload: dict[str, Any],
-        cmd: int = 0,
-        timeout: float = DEFAULT_TIMEOUT,
+            self,
+            opcode: Opcode,
+            payload: dict[str, Any],
+            cmd: int = 0,
+            timeout: float = DEFAULT_TIMEOUT,
     ) -> dict[str, Any]:
         ws = self.ws
         msg = self._make_message(opcode, payload, cmd)
