@@ -634,15 +634,17 @@ class BaseTransport(ClientProtocol):
                 self.logger.warning("CHATS_LIST pagination failed", exc_info=True)
                 break
 
-    async def _send_assets_update(self, sync_type: int = 2, sync_value: int = 0) -> None:
-        try:
-            await self._send_and_wait(
-                opcode=Opcode.ASSETS_UPDATE,
-                payload={"type": sync_type, "sync": sync_value},
-            )
-            self.logger.debug("ASSETS_UPDATE type=%d sent", sync_type)
-        except Exception:
-            self.logger.warning("ASSETS_UPDATE failed", exc_info=True)
+    async def _send_assets_update(self, sync_value: int = 0) -> None:
+        assets = ["STICKER", "FAVORITE_STICKER", "REACTION", "ANIMOJI_SET"]
+        for asset in assets:
+            try:
+                await self._send_and_wait(
+                    opcode=Opcode.ASSETS_UPDATE,
+                    payload={"type": asset, "sync": sync_value},
+                )
+                self.logger.debug("ASSETS_UPDATE type=%d sent", asset)
+            except Exception:
+                self.logger.warning("ASSETS_UPDATE failed", exc_info=True)
 
     async def _send_config(self) -> None:
         try:
@@ -667,8 +669,8 @@ class BaseTransport(ClientProtocol):
     async def _post_login_sync(self, chat_marker: int) -> None:
         if not self.user_agent.device_type == "WEB":
             await self._fetch_remaining_chats(chat_marker)
-            await self._send_assets_update(sync_type=2)
-            await self._send_assets_update(sync_type=4)
+            await self._send_assets_update(chat_marker)
+            await self._send_assets_update(chat_marker)
             await self._fetch_folders()
             await self._send_config()
 
