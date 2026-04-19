@@ -669,7 +669,7 @@ class BaseTransport(ClientProtocol):
     async def _post_login_sync(self, chat_marker: int) -> None:
         if not self.user_agent.device_type == "WEB":
             await self._fetch_remaining_chats(chat_marker)
-            await self._send_assets_update(chat_marker)
+            await self._send_assets_update()
             await self._fetch_folders()
             await self._send_config()
 
