@@ -5,7 +5,7 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
-import aiohttp
+from curl_cffi.requests import AsyncSession
 
 from pymax.exceptions import Error, SocketNotConnectedError, WebSocketNotConnectedError
 from pymax.files import Photo
@@ -69,27 +69,21 @@ class SelfMixin(ClientProtocol):
         parsed_url = urlparse(upload_url)
         photo_id = parse_qs(parsed_url.query)["photoIds"][0]
 
-        form = aiohttp.FormData()
-        form.add_field(
-            "file",
-            await photo.read(),
-            filename=photo.file_name,
-        )
+        photo_bytes = await photo.read()
 
-        async with (
-            aiohttp.ClientSession() as session,
-            session.post(upload_url, data=form) as response,
-        ):
-            if response.status != HTTPStatus.OK:
+        async with AsyncSession(impersonate="chrome131") as session:
+            response = await session.post(
+                upload_url,
+                multipart={"file": (photo.file_name, photo_bytes)},
+            )
+            if response.status_code != HTTPStatus.OK:
                 raise Error(
                     "Failed to upload profile photo.", message="UploadError", title="Upload Error"
                 )
 
             self.logger.info("Upload successful")
-            data = await response.json()
-            return data["photos"][photo_id][
-                "token"
-            ]  # TODO: сделать нормальную типизацию и чекнинг ответа
+            data = response.json()
+            return data["photos"][photo_id]["token"]
 
     async def change_profile(
         self,

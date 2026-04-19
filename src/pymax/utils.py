@@ -1,9 +1,9 @@
 import re
-import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, NoReturn
 
-import requests
+from curl_cffi import requests
+from curl_cffi.requests import RequestsError
 
 from pymax.exceptions import Error, RateLimitError
 
@@ -35,7 +35,7 @@ class MixinsUtils:
     def _fetch_and_extract(url: str, session: requests.Session) -> str | None:
         try:
             js_code = session.get(url, timeout=10).text
-        except requests.RequestException:
+        except RequestsError:
             return None
         return MixinsUtils._extract_version(js_code)
 
@@ -58,15 +58,19 @@ class MixinsUtils:
     @staticmethod
     def get_current_web_version() -> str | None:
         try:
-            html = requests.get("https://web.max.ru/", timeout=10).text
-        except requests.RequestException:
+            html = requests.get(
+                "https://web.max.ru/", timeout=10, impersonate="chrome131",
+            ).text
+        except RequestsError:
             return None
 
         main_chunk_import = html.split("import(")[2].split(")")[0].strip("\"'")
         main_chunk_url = f"https://web.max.ru{main_chunk_import}"
         try:
-            main_chunk_code = requests.get(main_chunk_url, timeout=10).text
-        except requests.exceptions.RequestException as e:
+            main_chunk_code = requests.get(
+                main_chunk_url, timeout=10, impersonate="chrome131",
+            ).text
+        except RequestsError:
             return None
 
         arr = main_chunk_code.split("\n")[0].split("[")[1].split("]")[0].split(",")
@@ -76,8 +80,7 @@ class MixinsUtils:
                 url = "https://web.max.ru/_app/immutable" + i[3 : len(i) - 1]
                 urls.append(url)
 
-        session = requests.Session()
-        session.headers["User-Agent"] = "Mozilla/5.0"
+        session = requests.Session(impersonate="chrome131")
         if urls:
             with ThreadPoolExecutor(max_workers=8) as pool:
                 futures = [

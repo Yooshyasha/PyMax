@@ -3,9 +3,8 @@ import time
 from http import HTTPStatus
 from pathlib import Path
 
-import aiohttp
 from aiofiles import open as aio_open
-from aiohttp import ClientSession, TCPConnector
+from curl_cffi.requests import AsyncSession
 
 from pymax.exceptions import Error
 from pymax.files import File, Photo, Video
@@ -69,15 +68,13 @@ class MessageMixin(ClientProtocol):
             self.logger.debug("Got upload URL and file_id=%s", file_id)
 
             if file.path:
-                file_size = Path(file.path).stat().st_size
+                file_bytes = await file.read()
+                file_size = len(file_bytes)
                 self.logger.info("File size from path: %.2f MB", file_size / (1024 * 1024))
             else:
                 file_bytes = await file.read()
                 file_size = len(file_bytes)
                 self.logger.info("File size from URL: %.2f MB", file_size / (1024 * 1024))
-
-            connector = TCPConnector(limit=0)
-            timeout = aiohttp.ClientTimeout(total=None, sock_read=None, sock_connect=30)
 
             headers = {
                 "Content-Disposition": f"attachment; filename={file.file_name}",
@@ -89,65 +86,13 @@ class MessageMixin(ClientProtocol):
             fut: asyncio.Future[dict] = loop.create_future()
             self._file_upload_waiters[int(file_id)] = fut
 
-            async def file_generator():
-                bytes_sent = 0
-                chunk_num = 0
-                self.logger.debug("Starting file streaming from: %s", file.path)
-                async with aio_open(file.path, "rb") as f:
-                    while True:
-                        chunk = await f.read(self.CHUNK_SIZE)
-                        if not chunk:
-                            self.logger.info(
-                                "File streaming complete: %d bytes in %d chunks",
-                                bytes_sent,
-                                chunk_num,
-                            )
-                            break
-
-                        yield chunk
-
-                        bytes_sent += len(chunk)
-                        chunk_num += 1
-                        if chunk_num % 10 == 0:
-                            self.logger.info(
-                                "Upload progress: %.1f MB in %d chunks",
-                                bytes_sent / (1024 * 1024),
-                                chunk_num,
-                            )
-                        if chunk_num % 4 == 0:
-                            await asyncio.sleep(0)
-
-            async def bytes_generator(b: bytes):
-                bytes_sent = 0
-                chunk_num = 0
-                for i in range(0, len(b), self.CHUNK_SIZE):
-                    chunk = b[i: i + self.CHUNK_SIZE]
-                    yield chunk
-                    bytes_sent += len(chunk)
-                    chunk_num += 1
-                    if chunk_num % 10 == 0:
-                        self.logger.info(
-                            "Upload progress: %.1f MB in %d chunks",
-                            bytes_sent / (1024 * 1024),
-                            chunk_num,
-                        )
-                    if chunk_num % 4 == 0:
-                        await asyncio.sleep(0)
-
-            if file.path:
-                data_to_send = file_generator()
-            else:
-                data_to_send = bytes_generator(file_bytes)
-
             self.logger.info("Starting file upload: %s", file.file_name)
 
-            async with (
-                ClientSession(connector=connector, timeout=timeout) as session,
-                session.post(url=url, headers=headers, data=data_to_send) as response,
-            ):
-                self.logger.debug("Server response status: %d", response.status)
-                if response.status != HTTPStatus.OK:
-                    self.logger.error("Upload failed with status %s", response.status)
+            async with AsyncSession(impersonate="chrome131") as session:
+                response = await session.post(url=url, headers=headers, content=file_bytes)
+                self.logger.debug("Server response status: %d", response.status_code)
+                if response.status_code != HTTPStatus.OK:
+                    self.logger.error("Upload failed with status %s", response.status_code)
                     self._file_upload_waiters.pop(int(file_id), None)
                     return None
 
@@ -199,10 +144,6 @@ class MessageMixin(ClientProtocol):
             file_bytes = await video.read()
             file_size = len(file_bytes)
 
-            # Настройки для ClientSession
-            connector = TCPConnector(limit=0)
-            timeout = aiohttp.ClientTimeout(total=900, sock_read=60)  # 15 минут на видео
-
             headers = {
                 "Content-Disposition": f"attachment; filename={video.file_name}",
                 "Content-Range": f"0-{file_size - 1}/{file_size}",
@@ -218,27 +159,27 @@ class MessageMixin(ClientProtocol):
                 self.logger.exception("Failed to register file upload waiter")
 
             try:
-                async with ClientSession(connector=connector, timeout=timeout) as session:
-                    async with session.post(
+                async with AsyncSession(impersonate="chrome131", timeout=900) as session:
+                    response = await session.post(
                         url=url,
                         headers=headers,
-                            data=file_bytes,
-                    ) as response:
-                        if response.status != HTTPStatus.OK:
-                            self.logger.error("Upload failed with status %s", response.status)
-                            self._file_upload_waiters.pop(int(video_id), None)
-                            return None
+                        content=file_bytes,
+                    )
+                    if response.status_code != HTTPStatus.OK:
+                        self.logger.error("Upload failed with status %s", response.status_code)
+                        self._file_upload_waiters.pop(int(video_id), None)
+                        return None
 
-                        try:
-                            await asyncio.wait_for(fut, timeout=DEFAULT_TIMEOUT)
-                            return Attach(_type=AttachType.VIDEO, video_id=video_id, token=token)
-                        except asyncio.TimeoutError:
-                            self.logger.warning(
-                                "Timed out waiting for video processing notification for videoId=%s",
-                                video_id,
-                            )
-                            self._file_upload_waiters.pop(int(video_id), None)
-                            return None
+                    try:
+                        await asyncio.wait_for(fut, timeout=DEFAULT_TIMEOUT)
+                        return Attach(_type=AttachType.VIDEO, video_id=video_id, token=token)
+                    except asyncio.TimeoutError:
+                        self.logger.warning(
+                            "Timed out waiting for video processing notification for videoId=%s",
+                            video_id,
+                        )
+                        self._file_upload_waiters.pop(int(video_id), None)
+                        return None
             except OSError as e:
                 if "malloc failure" in str(e) or "BUF" in str(e):
                     self.logger.exception(
@@ -274,26 +215,20 @@ class MessageMixin(ClientProtocol):
                 self.logger.error("Photo validation failed")
                 return None
 
-            form = aiohttp.FormData()
-            form.add_field(
-                name="file",
-                value=await photo.read(),
-                filename=f"image.{photo_data[0]}",
-                content_type=photo_data[1],
-            )
+            photo_bytes = await photo.read()
 
-            async with (
-                ClientSession() as session,
-                session.post(
+            async with AsyncSession(impersonate="chrome131") as session:
+                response = await session.post(
                     url=url,
-                    data=form,
-                ) as response,
-            ):
-                if response.status != HTTPStatus.OK:
-                    self.logger.error(f"Upload failed with status {response.status}")
+                    multipart={
+                        "file": (f"image.{photo_data[0]}", photo_bytes, photo_data[1]),
+                    },
+                )
+                if response.status_code != HTTPStatus.OK:
+                    self.logger.error("Upload failed with status %s", response.status_code)
                     return None
 
-                result = await response.json()
+                result = response.json()
 
                 if not result.get("photos"):
                     self.logger.error("No photos in response")
