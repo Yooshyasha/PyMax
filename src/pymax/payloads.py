@@ -251,7 +251,7 @@ class LoginPayload(CamelModel):
     banners_sync: int = 0
     config_hash: str | None = None
 
-    def to_payload(self) -> dict[str, Any]:
+    def to_payload(self, exp: bool) -> dict[str, Any]:
         d: dict[str, Any] = {
             "token": self.token,
             "interactive": self.interactive,
@@ -271,7 +271,8 @@ class LoginPayload(CamelModel):
             d["bannersSync"] = self.banners_sync
         if self.config_hash:
             d["configHash"] = self.config_hash
-        d["exp"] = {}
+        if exp:
+            d["exp"] = {}
         return d
 
 

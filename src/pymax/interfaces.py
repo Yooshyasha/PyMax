@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import ssl
 import time
 import traceback
 from abc import abstractmethod
@@ -537,7 +536,8 @@ class BaseTransport(ClientProtocol):
             banners_sync=self._banners_sync,
             config_hash=self._config_hash,
         )
-        payload = login.to_payload()
+        exp = not user_agent.device_type == "WEB"
+        payload = login.to_payload(exp)
 
         try:
             data = await self._send_and_wait(opcode=Opcode.LOGIN, payload=payload)
