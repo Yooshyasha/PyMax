@@ -4,6 +4,7 @@ from typing import Final
 
 import ua_generator
 from pymax.utils import MixinsUtils
+from websockets.typing import Origin
 
 ANDROID_DEVICES: Final[list[dict[str, str]]] = [
     {"model": "SM-S928B", "name": "Samsung Galaxy S24 Ultra", "screen": "1440x3120 3.0x"},
@@ -142,7 +143,7 @@ TIMEZONES: Final[list[str]] = [
 PHONE_REGEX: Final[Pattern[str]] = compile(r"^\+?\d{10,15}$")
 WEBSOCKET_URI: Final[str] = "wss://ws-api.oneme.ru/websocket"
 SESSION_STORAGE_DB = "session.db"
-WEBSOCKET_ORIGIN: Final[str] = "https://web.max.ru"
+WEBSOCKET_ORIGIN: Final[Origin] = Origin("https://web.max.ru")
 HOST: Final[str] = "api.oneme.ru"
 PORT: Final[int] = 443
 DEFAULT_TIMEOUT: Final[float] = 20.0

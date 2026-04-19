@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from aiofiles import open as aio_open
-from curl_cffi.requests import AsyncSession
+from aiohttp import ClientSession
 from typing_extensions import override
 
 
@@ -28,10 +28,12 @@ class BaseFile(ABC):
             return self.raw
 
         if self.url:
-            async with AsyncSession(impersonate="chrome131") as session:
-                response = await session.get(self.url)
+            async with (
+                ClientSession() as session,
+                session.get(self.url) as response,
+            ):
                 response.raise_for_status()
-                return response.content
+                return await response.read()
         elif self.path:
             async with aio_open(self.path, "rb") as f:
                 return await f.read()

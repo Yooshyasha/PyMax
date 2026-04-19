@@ -40,7 +40,7 @@ from .static.enum import Opcode
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from curl_cffi.requests.websockets import AsyncWebSocket
+    import websockets
 
     from pymax.filters import BaseFilter
 
@@ -192,8 +192,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
 
         self._ssl_context = self._build_ssl_context()
         self._socket: socket.socket | None = None
-        self._ws: AsyncWebSocket | None = None
-        self._curl_session = None
+        self._ws: websockets.ClientConnection | None = None
 
         self._setup_logger()
         self.logger.debug(
@@ -325,13 +324,12 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         return ctx
 
     async def _wait_forever(self) -> None:
-        if self._recv_task:
-            try:
-                await self._recv_task
-            except asyncio.CancelledError:
-                self.logger.debug("recv_task cancelled")
-            except Exception as e:
-                self.logger.exception("recv_task failed: %s", e)
+        try:
+            await self.ws.wait_closed()
+        except asyncio.CancelledError:
+            self.logger.debug("wait_closed cancelled")
+        except WebSocketNotConnectedError:
+            self.logger.info("WebSocket not connected, exiting wait_forever")
 
     async def close(self) -> None:
         """
