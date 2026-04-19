@@ -18,8 +18,6 @@ from pymax.types import (
 )
 
 if TYPE_CHECKING:
-    import socket
-    import ssl
     from pathlib import Path
     from uuid import UUID
 
@@ -27,6 +25,7 @@ if TYPE_CHECKING:
     from curl_cffi.requests.websockets import AsyncWebSocket
 
     from pymax.crud import Database
+    from pymax.curl_socket import CurlTLSSocket
     from pymax.filters import BaseFilter
 
 
@@ -99,8 +98,7 @@ class ClientProtocol(ABC):
         self._scheduled_tasks: list[tuple[Callable[[], Any | Awaitable[Any]], float]] = []
         self._on_start_handler: Callable[[], Any | Awaitable[Any]] | None = None
         self._background_tasks: set[asyncio.Task[Any]] = set()
-        self._ssl_context: ssl.SSLContext
-        self._socket: socket.socket | None = None
+        self._socket: CurlTLSSocket | None = None
 
     @abstractmethod
     async def _send_and_wait(
