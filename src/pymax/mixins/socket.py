@@ -1,11 +1,14 @@
 import asyncio
+import socket
+import ssl
+import sys
 from typing import Any
 
 import lz4.block
 import msgpack
+from python_socks.async_.asyncio import Proxy
 from typing_extensions import override
 
-from pymax.curl_socket import CurlTLSSocket
 from pymax.exceptions import SocketNotConnectedError, SocketSendError
 from pymax.interfaces import BaseTransport
 from pymax.payloads import UserAgentPayload
@@ -17,8 +20,6 @@ from pymax.static.enum import Opcode
 from pymax.types import (
     Chat,
 )
-
-DEFAULT_IMPERSONATE = "chrome_android"
 
 
 class SocketMixin(BaseTransport):
@@ -32,8 +33,29 @@ class SocketMixin(BaseTransport):
             return self.proxy
         return None
 
+    async def _create_raw_socket(self) -> socket.socket:
+        """Создаёт сырой TCP-сокет с учётом настроек прокси.
+
+        Если прокси не задан — устанавливает прямое соединение.
+        Если задан URL прокси (SOCKS4/SOCKS5/HTTP) или proxy=True —
+        соединение устанавливается через прокси-сервер.
+
+        :return: Подключённый сокет.
+        :rtype: socket.socket
+        """
+        proxy_url = self._resolve_proxy_url()
+        if proxy_url is not None:
+            self.logger.info("Connecting via proxy: %s", proxy_url)
+            proxy = Proxy.from_url(proxy_url)
+            return await proxy.connect(dest_host=self.host, dest_port=self.port)
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: socket.create_connection((self.host, self.port))
+        )
+
     @property
-    def sock(self) -> CurlTLSSocket:
+    def sock(self) -> socket.socket:
         if self._socket is None or not self.is_connected:
             self.logger.critical("Socket not connected when access attempted")
             raise SocketNotConnectedError()
@@ -52,6 +74,8 @@ class SocketMixin(BaseTransport):
         payload = None
         if payload_bytes:
             if comp_flag != 0:
+                # TODO: надо выяснить правильный размер распаковки
+                # uncompressed_size = int.from_bytes(payload_bytes[0:4], "big")
                 compressed_data = payload_bytes
                 try:
                     payload_bytes = lz4.block.decompress(
@@ -91,36 +115,55 @@ class SocketMixin(BaseTransport):
         return ver_b + cmd_b + seq_b + opcode_b + payload_len_b + payload_bytes
 
     async def connect(self, user_agent: UserAgentPayload | None = None) -> dict[str, Any]:
+        """
+        Устанавливает соединение с сервером и выполняет handshake.
+
+        :param user_agent: Пользовательский агент для handshake. Если None, используется значение по умолчанию.
+        :type user_agent: UserAgentPayload | None
+        :return: Результат handshake.
+        :rtype: dict[str, Any] | None
+        """
         if user_agent is None:
             user_agent = UserAgentPayload()
-
+        if sys.version_info[:2] == (3, 12):
+            self.logger.warning(
+                """
+===============================================================
+         ⚠️⚠️ \033[0;31mWARNING: Python 3.12 detected!\033[0m ⚠️⚠️
+Socket connections may be unstable, SSL issues are possible.
+===============================================================
+    """
+            )
         self.logger.info("Connecting to socket %s:%s", self.host, self.port)
 
         await self._cancel_io_tasks()
 
-        proxy = self._resolve_proxy_url()
-
-        loop = asyncio.get_running_loop()
-        self._socket = await loop.run_in_executor(
-            None,
-            lambda: CurlTLSSocket.connect(
-                host=self.host,
-                port=self.port,
-                impersonate=DEFAULT_IMPERSONATE,
-                proxy=proxy,
-            ),
-        )
-
+        raw_sock = await self._create_raw_socket()
+        self._socket = self._ssl_context.wrap_socket(raw_sock, server_hostname=self.host, do_handshake_on_connect=False)
+        await self._do_ssl_handshake()
+        self._socket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
         self.is_connected = True
         self._incoming = asyncio.Queue()
         self._outgoing = asyncio.Queue()
         self._pending = {}
         self._recv_task = asyncio.create_task(self._recv_loop())
         self._outgoing_task = asyncio.create_task(self._outgoing_loop())
-        self.logger.info("Socket connected (curl_cffi / BoringSSL), starting handshake")
+        self.logger.info("Socket connected, starting handshake")
         return await self._handshake(user_agent)
 
-    def _recv_exactly(self, sock: CurlTLSSocket, n: int) -> bytes:
+    async def _do_ssl_handshake(self):
+        while True:
+            try:
+                # noinspection PyUnresolvedReferences
+                # оно будет sslcontext
+                self._socket.do_handshake()
+                return
+            except ssl.SSLWantReadError:
+                await asyncio.sleep(0)
+            except ssl.SSLWantWriteError:
+                await asyncio.sleep(0)
+
+    def _recv_exactly(self, sock: socket.socket, n: int) -> bytes:
         buf = bytearray()
         while len(buf) < n:
             chunk = sock.recv(n - len(buf))
@@ -130,7 +173,7 @@ class SocketMixin(BaseTransport):
         return bytes(buf)
 
     async def _parse_header(
-            self, loop: asyncio.AbstractEventLoop, sock: CurlTLSSocket,
+            self, loop: asyncio.AbstractEventLoop, sock: socket.socket
     ) -> bytes | None:
         header = await loop.run_in_executor(None, lambda: self._recv_exactly(sock=sock, n=10))
         if not header or len(header) < 10:
@@ -144,7 +187,7 @@ class SocketMixin(BaseTransport):
         return header
 
     async def _recv_data(
-            self, loop: asyncio.AbstractEventLoop, header: bytes, sock: CurlTLSSocket,
+            self, loop: asyncio.AbstractEventLoop, header: bytes, sock: socket.socket
     ) -> list[dict[str, Any]] | None:
         packed_len = int.from_bytes(header[6:10], "big", signed=False)
         payload_length = packed_len & 0xFFFFFF
@@ -269,7 +312,7 @@ class SocketMixin(BaseTransport):
             )
             return data
 
-        except (ConnectionError, OSError) as conn_err:
+        except (ssl.SSLEOFError, ssl.SSLError, ConnectionError) as conn_err:
             self.logger.warning("Connection lost during send (opcode=%s)", opcode)
             self.is_connected = False
             raise SocketNotConnectedError from conn_err

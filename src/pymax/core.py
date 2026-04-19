@@ -5,6 +5,8 @@ import contextlib
 import datetime
 import logging
 import random
+import socket
+import ssl
 import time
 from collections.abc import Awaitable
 from pathlib import Path
@@ -188,7 +190,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         self._on_raw_receive_handlers: list[Callable[[dict[str, Any]], Any | Awaitable[Any]]] = []
         self._scheduled_tasks: list[tuple[Callable[[], Any | Awaitable[Any]], float]] = []
 
-        self._socket = None
+        self._ssl_context = self._build_ssl_context()
+        self._socket: socket.socket | None = None
         self._ws: AsyncWebSocket | None = None
         self._curl_session = None
 
@@ -209,6 +212,117 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
                 f"{self.__class__.__name__} does not support "
                 f"device_type={self.user_agent.device_type}"
             )
+
+    def _build_ssl_context(self) -> ssl.SSLContext:
+        device = self.user_agent.device_type
+        if device == "ANDROID":
+            return self._build_android_ssl_context()
+        if device == "IOS":
+            return self._build_ios_ssl_context()
+        ctx = ssl.create_default_context()
+        ctx.set_ciphers("DEFAULT")
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.load_default_certs()
+        return ctx
+
+    @staticmethod
+    def _build_android_ssl_context() -> ssl.SSLContext:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.load_default_certs()
+        ctx.options |= ssl.OP_NO_COMPRESSION
+
+        ctx.set_alpn_protocols(["h2", "http/1.1"])
+
+        # BoringSSL (Android) cipher suites for TLS 1.2.
+        # TLS 1.3 suites (AES-128-GCM, AES-256-GCM, CHACHA20) are always
+        # enabled by Python and can't be reordered — that matches Android.
+        #
+        # We build per-session variation by:
+        #   - swapping ECDSA / RSA priority within each strength tier
+        #   - swapping AES-128 / AES-256 tier order
+        #   - placing ChaCha20 before or after AES-GCM
+        #   - randomly including / excluding optional legacy ciphers
+
+        ecdsa_first = random.random() < 0.5
+        aes256_first = random.random() < 0.5
+        chacha_early = random.random() < 0.35
+
+        def _pair(ecdsa: str, rsa: str) -> list[str]:
+            return [ecdsa, rsa] if ecdsa_first else [rsa, ecdsa]
+
+        gcm_128 = _pair("ECDHE-ECDSA-AES128-GCM-SHA256",
+                        "ECDHE-RSA-AES128-GCM-SHA256")
+        gcm_256 = _pair("ECDHE-ECDSA-AES256-GCM-SHA384",
+                        "ECDHE-RSA-AES256-GCM-SHA384")
+        chacha = _pair("ECDHE-ECDSA-CHACHA20-POLY1305",
+                       "ECDHE-RSA-CHACHA20-POLY1305")
+
+        aes_tiers = (gcm_256 + gcm_128) if aes256_first else (gcm_128 + gcm_256)
+        primary = (chacha + aes_tiers) if chacha_early else (aes_tiers + chacha)
+
+        legacy: list[str] = []
+        if random.random() < 0.55:
+            sha_pair = ["ECDHE-RSA-AES128-SHA", "ECDHE-RSA-AES256-SHA"]
+            if random.random() < 0.5:
+                sha_pair.reverse()
+            legacy.extend(sha_pair)
+
+        fallback: list[str] = []
+        if random.random() < 0.45:
+            fb = ["AES128-GCM-SHA256", "AES256-GCM-SHA384"]
+            if random.random() < 0.5:
+                fb.reverse()
+            fallback.extend(fb)
+        if random.random() < 0.25:
+            fallback.append("AES128-SHA")
+
+        ctx.set_ciphers(":".join(primary + legacy + fallback))
+        return ctx
+
+    @staticmethod
+    def _build_ios_ssl_context() -> ssl.SSLContext:
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        ctx.check_hostname = True
+        ctx.verify_mode = ssl.CERT_REQUIRED
+        ctx.load_default_certs()
+        ctx.options |= ssl.OP_NO_COMPRESSION
+
+        ctx.set_alpn_protocols(["h2", "http/1.1"])
+
+        chacha_top = random.random() < 0.4
+
+        ecdsa_256 = "ECDHE-ECDSA-AES256-GCM-SHA384"
+        ecdsa_128 = "ECDHE-ECDSA-AES128-GCM-SHA256"
+        ecdsa_cc = "ECDHE-ECDSA-CHACHA20-POLY1305"
+        rsa_256 = "ECDHE-RSA-AES256-GCM-SHA384"
+        rsa_128 = "ECDHE-RSA-AES128-GCM-SHA256"
+        rsa_cc = "ECDHE-RSA-CHACHA20-POLY1305"
+
+        if chacha_top:
+            ciphers = [
+                ecdsa_cc, ecdsa_256, ecdsa_128,
+                rsa_cc, rsa_256, rsa_128,
+            ]
+        else:
+            ciphers = [
+                ecdsa_256, ecdsa_cc, ecdsa_128,
+                rsa_256, rsa_cc, rsa_128,
+            ]
+
+        if random.random() < 0.4:
+            fb = ["AES256-GCM-SHA384", "AES128-GCM-SHA256"]
+            if random.random() < 0.3:
+                fb.reverse()
+            ciphers.extend(fb)
+
+        ctx.set_ciphers(":".join(ciphers))
+        return ctx
 
     async def _wait_forever(self) -> None:
         if self._recv_task:
