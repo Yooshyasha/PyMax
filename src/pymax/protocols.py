@@ -23,7 +23,8 @@ if TYPE_CHECKING:
     from pathlib import Path
     from uuid import UUID
 
-    import websockets
+    from curl_cffi.requests import AsyncSession
+    from curl_cffi.requests.websockets import AsyncWebSocket
 
     from pymax.crud import Database
     from pymax.filters import BaseFilter
@@ -55,7 +56,8 @@ class ClientProtocol(ABC):
         self.reconnect: bool
         self.headers: UserAgentPayload
         self._database_path: Path
-        self._ws: websockets.ClientConnection | None = None
+        self._ws: AsyncWebSocket | None = None
+        self._curl_session: AsyncSession | None = None
         self._seq: int = 0
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
         self._recv_task: asyncio.Task[Any] | None = None

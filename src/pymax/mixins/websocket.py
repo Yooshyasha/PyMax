@@ -2,7 +2,8 @@ import asyncio
 import json
 from typing import Any
 
-import websockets
+from curl_cffi.requests import AsyncSession
+from curl_cffi.requests.websockets import AsyncWebSocket, WebSocketClosed, WebSocketError
 from typing_extensions import override
 
 from pymax.exceptions import WebSocketNotConnectedError
@@ -18,10 +19,12 @@ from pymax.types import (
     Chat,
 )
 
+DEFAULT_IMPERSONATE = "chrome131"
+
 
 class WebSocketMixin(BaseTransport):
     @property
-    def ws(self) -> websockets.ClientConnection:
+    def ws(self) -> AsyncWebSocket:
         if self._ws is None or not self.is_connected:
             self.logger.critical("WebSocket not connected when access attempted")
             raise WebSocketNotConnectedError
@@ -47,11 +50,18 @@ class WebSocketMixin(BaseTransport):
 
         await self._cancel_io_tasks()
 
-        self._ws = await websockets.connect(
+        proxy = self.proxy if isinstance(self.proxy, str) else None
+
+        self._curl_session = AsyncSession(
+            impersonate=DEFAULT_IMPERSONATE,
+            proxy=proxy,
+        )
+        self._ws = await self._curl_session.ws_connect(
             self.uri,
-            origin=WEBSOCKET_ORIGIN,
-            user_agent_header=user_agent.header_user_agent,
-            proxy=self.proxy,
+            headers={
+                "Origin": WEBSOCKET_ORIGIN,
+                "User-Agent": user_agent.header_user_agent,
+            },
         )
         self.is_connected = True
         self._incoming = asyncio.Queue()
@@ -70,7 +80,8 @@ class WebSocketMixin(BaseTransport):
         self.logger.debug("Receive loop started")
         while True:
             try:
-                raw = await self._ws.recv()
+                raw_bytes, flags = await self._ws.recv()
+                raw = raw_bytes.decode("utf-8", errors="replace")
                 data = self._parse_json(raw)
 
                 if data is None:
@@ -83,9 +94,9 @@ class WebSocketMixin(BaseTransport):
                 await self._handle_incoming_queue(data)
                 await self._dispatch_incoming(data)
 
-            except websockets.exceptions.ConnectionClosed as e:
+            except (WebSocketClosed, WebSocketError) as e:
                 self.logger.info(
-                    f"WebSocket connection closed with error: {e.code}, {e.reason}; exiting recv loop"
+                    "WebSocket connection closed: %s; exiting recv loop", e
                 )
                 for fut in self._pending.values():
                     if not fut.done():
@@ -128,7 +139,7 @@ class WebSocketMixin(BaseTransport):
                 cmd,
                 msg["seq"],
             )
-            await ws.send(json.dumps(msg))
+            await ws.send_str(json.dumps(msg))
             data = await asyncio.wait_for(fut, timeout=timeout)
             self.logger.debug(
                 "Received frame for seq=%s opcode=%s",

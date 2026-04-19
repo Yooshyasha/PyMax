@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import ssl
 import time
 import traceback
 from abc import abstractmethod
@@ -103,6 +102,13 @@ class BaseClient(ClientProtocol):
             except Exception:
                 self.logger.debug("Error closing ws during cleanup", exc_info=True)
             self._ws = None
+
+        if self._curl_session:
+            try:
+                await self._curl_session.close()
+            except Exception:
+                self.logger.debug("Error closing curl session during cleanup", exc_info=True)
+            self._curl_session = None
 
         self.is_connected = False
         self.logger.info("Client start() cleaned up")
