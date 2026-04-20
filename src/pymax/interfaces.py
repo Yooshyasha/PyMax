@@ -634,17 +634,27 @@ class BaseTransport(ClientProtocol):
                 self.logger.warning("CHATS_LIST pagination failed", exc_info=True)
                 break
 
-    async def _send_assets_update(self, sync_value: int = 0) -> None:
-        assets = ["STICKER", "FAVORITE_STICKER", "REACTION", "ANIMOJI_SET"]
-        for asset in assets:
+    async def _send_assets_update(
+        self,
+        sticker_sync: int = 0,
+        favorite_sticker_set_sync: int = 0,
+    ) -> None:
+        for asset_type, sync in (
+            ("STICKER", sticker_sync),
+            ("FAVORITE_STICKER_SET", favorite_sticker_set_sync),
+        ):
             try:
                 await self._send_and_wait(
                     opcode=Opcode.ASSETS_UPDATE,
-                    payload={"type": asset, "sync": sync_value},
+                    payload={"type": asset_type, "sync": sync},
                 )
-                self.logger.debug("ASSETS_UPDATE type=%d sent", asset)
+                self.logger.debug(
+                    "ASSETS_UPDATE type=%s sync=%s sent", asset_type, sync
+                )
             except Exception:
-                self.logger.warning("ASSETS_UPDATE failed", exc_info=True)
+                self.logger.warning(
+                    "ASSETS_UPDATE %s failed", asset_type, exc_info=True
+                )
 
     async def _send_config(self) -> None:
         try:
