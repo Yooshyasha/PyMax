@@ -79,11 +79,21 @@ _curl_easy_recv.argtypes = [
 class CurlTLSSocket:
     __slots__ = ("_curl", "_handle", "_sock_fd", "_closed")
 
-    def __init__(self, curl: Curl, handle: int, sock_fd: int) -> None:
+    def __init__(self, curl: Curl, handle: ctypes.c_void_p, sock_fd: int) -> None:
         self._curl = curl
         self._handle = handle
         self._sock_fd = sock_fd
         self._closed = False
+
+    def _refresh_sock_fd(self) -> bool:
+        try:
+            fd = int(self._curl.getinfo(CurlInfo.ACTIVESOCKET))
+        except Exception:
+            return False
+        if fd < 0:
+            return False
+        self._sock_fd = fd
+        return True
 
     @classmethod
     def connect(
@@ -104,7 +114,7 @@ class CurlTLSSocket:
 
             curl.perform()
 
-            raw_handle = int(ffi.cast("uintptr_t", curl._curl))
+            raw_handle = ctypes.c_void_p(int(ffi.cast("uintptr_t", curl._curl)))
             sock_fd = int(curl.getinfo(CurlInfo.ACTIVESOCKET))
 
             return cls(curl, raw_handle, sock_fd)
@@ -124,8 +134,13 @@ class CurlTLSSocket:
                 self._handle, buf, bufsize, ctypes.byref(n_recv),
             )
             if ret == _CURLE_OK:
+                if n_recv.value == 0:
+                    self.close()
+                    return b""
                 return buf.raw[: n_recv.value]
             if ret == _CURLE_AGAIN:
+                if not self._refresh_sock_fd():
+                    return b""
                 try:
                     select([self._sock_fd], [], [], _SELECT_TIMEOUT)
                 except (OSError, ValueError):
@@ -154,6 +169,8 @@ class CurlTLSSocket:
                 offset += n_sent.value
                 continue
             if ret == _CURLE_AGAIN:
+                if not self._refresh_sock_fd():
+                    raise OSError("Socket closed during send")
                 try:
                     select([], [self._sock_fd], [], _SELECT_TIMEOUT)
                 except (OSError, ValueError):
