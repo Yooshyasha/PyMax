@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+import threading
 from pathlib import Path
 from select import select
 from typing import Final
@@ -77,23 +78,25 @@ _curl_easy_recv.argtypes = [
 
 
 class CurlTLSSocket:
-    __slots__ = ("_curl", "_handle", "_sock_fd", "_closed")
+    __slots__ = ("_curl", "_handle", "_sock_fd", "_closed", "_curl_lock")
 
     def __init__(self, curl: Curl, handle: ctypes.c_void_p, sock_fd: int) -> None:
         self._curl = curl
         self._handle = handle
         self._sock_fd = sock_fd
         self._closed = False
+        self._curl_lock = threading.RLock()
 
     def _refresh_sock_fd(self) -> bool:
-        try:
-            fd = int(self._curl.getinfo(CurlInfo.ACTIVESOCKET))
-        except Exception:
-            return False
-        if fd < 0:
-            return False
-        self._sock_fd = fd
-        return True
+        with self._curl_lock:
+            try:
+                fd = int(self._curl.getinfo(CurlInfo.ACTIVESOCKET))
+            except Exception:
+                return False
+            if fd < 0:
+                return False
+            self._sock_fd = fd
+            return True
 
     @classmethod
     def connect(
@@ -130,9 +133,10 @@ class CurlTLSSocket:
         n_recv = ctypes.c_size_t(0)
 
         while True:
-            ret = _curl_easy_recv(
-                self._handle, buf, bufsize, ctypes.byref(n_recv),
-            )
+            with self._curl_lock:
+                ret = _curl_easy_recv(
+                    self._handle, buf, bufsize, ctypes.byref(n_recv),
+                )
             if ret == _CURLE_OK:
                 if n_recv.value == 0:
                     self.close()
@@ -159,12 +163,13 @@ class CurlTLSSocket:
 
         while offset < total:
             chunk = bytes(mv[offset:])
-            ret = _curl_easy_send(
-                self._handle,
-                chunk,
-                len(chunk),
-                ctypes.byref(n_sent),
-            )
+            with self._curl_lock:
+                ret = _curl_easy_send(
+                    self._handle,
+                    chunk,
+                    len(chunk),
+                    ctypes.byref(n_sent),
+                )
             if ret == _CURLE_OK:
                 offset += n_sent.value
                 continue
@@ -179,7 +184,9 @@ class CurlTLSSocket:
             raise CurlError(f"curl_easy_send failed (code {ret})", ret)
 
     def close(self) -> None:
-        if not self._closed:
+        with self._curl_lock:
+            if self._closed:
+                return
             self._closed = True
             try:
                 self._curl.close()
