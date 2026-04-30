@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import random
-from typing import Any, Literal
-
 import ua_generator
 from pydantic import AliasChoices, BaseModel, Field
+from typing import Any, Literal
 
 from pymax.static.constant import (
     ANDROID_BUILD_TAGS,
@@ -70,8 +69,8 @@ class UserAgentPayload(CamelModel):
 
 
 def _generate_android_ua(
-    app_version: str = DEFAULT_APP_VERSION,
-    build_number: int = DEFAULT_BUILD_NUMBER,
+        app_version: str = DEFAULT_APP_VERSION,
+        build_number: int = DEFAULT_BUILD_NUMBER,
 ) -> UserAgentPayload:
     device = random.choice(ANDROID_DEVICES)
     android_ver = random.choice(ANDROID_OS_VERSIONS)
@@ -100,8 +99,8 @@ def _generate_android_ua(
 
 
 def _generate_ios_ua(
-    app_version: str = DEFAULT_APP_VERSION,
-    build_number: int = DEFAULT_BUILD_NUMBER,
+        app_version: str = DEFAULT_APP_VERSION,
+        build_number: int = DEFAULT_BUILD_NUMBER,
 ) -> UserAgentPayload:
     device = random.choice(IOS_DEVICES)
     version = random.choice(IOS_VERSIONS)
@@ -129,8 +128,8 @@ def _generate_ios_ua(
 
 
 def _generate_desktop_ua(
-    app_version: str = DEFAULT_APP_VERSION,
-    build_number: int = DEFAULT_BUILD_NUMBER,
+        app_version: str = DEFAULT_APP_VERSION,
+        build_number: int = DEFAULT_BUILD_NUMBER,
 ) -> UserAgentPayload:
     os_info = random.choice(DESKTOP_OS_POOL)
 
@@ -156,8 +155,8 @@ def _generate_desktop_ua(
 
 
 def _generate_web_ua(
-    app_version: str = DEFAULT_APP_VERSION,
-    build_number: int = DEFAULT_BUILD_NUMBER,
+        app_version: str = DEFAULT_APP_VERSION,
+        build_number: int = DEFAULT_BUILD_NUMBER,
 ) -> UserAgentPayload:
     browser_name = random.choice(WEB_BROWSERS)
 
@@ -206,9 +205,9 @@ _GENERATORS: dict[str, callable] = {
 
 
 def generate_user_agent(
-    device_type: Literal["WEB", "DESKTOP", "ANDROID", "IOS"] = "WEB",
-    app_version: str = DEFAULT_APP_VERSION,
-    build_number: int = DEFAULT_BUILD_NUMBER,
+        device_type: Literal["WEB", "DESKTOP", "ANDROID", "IOS"] = "WEB",
+        app_version: str = DEFAULT_APP_VERSION,
+        build_number: int = DEFAULT_BUILD_NUMBER,
 ) -> UserAgentPayload:
     """Generate a realistic :class:`UserAgentPayload` for the given *device_type*.
 
@@ -272,7 +271,7 @@ class LoginPayload(CamelModel):
         if self.config_hash:
             d["configHash"] = self.config_hash
         if exp:
-            d["exp"] = {}
+            d["exp"] = {"chatsCountGroups": 0}
         return d
 
 
