@@ -271,7 +271,7 @@ class LoginPayload(CamelModel):
         if self.config_hash:
             d["configHash"] = self.config_hash
         if exp:
-            d["exp"] = {"chatsCountGroups": 0}
+            d["exp"] = {"chatsCountGroups": b"\x08\x00"}
         return d
 
 
