@@ -9,16 +9,15 @@ import time
 from collections.abc import Awaitable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional
-from uuid import UUID, uuid5
-
 from typing_extensions import override
+from uuid import UUID, uuid5
 
 from .crud import Database
 from .exceptions import (
     InvalidPhoneError,
     NeedRegistration,
     SocketNotConnectedError,
-    WebSocketNotConnectedError,
+    WebSocketNotConnectedError, AccountHasPassword,
 )
 from .interfaces import BaseClient
 from .mixins import ApiMixin, SocketMixin, WebSocketMixin
@@ -410,7 +409,8 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
         password_challenge = resp.get("passwordChallenge")
 
         if password_challenge and not login_attrs:
-            token = await self._two_factor_auth(password_challenge)
+            # token = await self._two_factor_auth(password_challenge)
+            raise AccountHasPassword(password_challenge.get("traceId"), password_challenge.get("hint", None))
         else:
             token = login_attrs.get("token")
 

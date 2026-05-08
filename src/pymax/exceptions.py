@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Optional
 
 
 class InvalidPhoneError(Exception):
@@ -115,3 +115,10 @@ class NeedRegistration(LoginError):
     def __init__(self, token: Any):
         self.auth_token = token
         super().__init__("Need registration", "", "Registration", "Нужна регистрация")
+
+
+class AccountHasPassword(LoginError):
+    def __init__(self, trace_id: str, hint: Optional[str]):
+        self.trace_id = trace_id
+        self.hint = hint
+        super().__init__("Account has password", "", "Login", "Аккаунт содержит пароль")
