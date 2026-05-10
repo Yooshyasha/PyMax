@@ -410,7 +410,7 @@ class MaxClient(ApiMixin, WebSocketMixin, BaseClient):
 
         if password_challenge and not login_attrs:
             # token = await self._two_factor_auth(password_challenge)
-            raise AccountHasPassword(password_challenge.get("traceId"), password_challenge.get("hint", None))
+            raise AccountHasPassword(password_challenge.get("trackId"), password_challenge.get("hint", None))
         else:
             token = login_attrs.get("token")
 
